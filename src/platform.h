@@ -12,7 +12,7 @@ typedef struct platform_input_info_t
     int mouse_y;
 } platform_input_info_t;
 
-void platform_handle_input_event(platform_input_info_t* input);
+void platform_handle_input_events(platform_input_info_t* input);
 bool platform_opengl_init(const char* window_title,
                           uint32_t width,
                           uint32_t height);

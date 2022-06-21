@@ -5,6 +5,7 @@
 
 // Global variables
 static Display* dpy;
+static Window window;
 static GLXWindow glxWindow;
 static Atom WM_DELETE_WINDOW;
 
@@ -153,10 +154,11 @@ bool platform_opengl_init(const char* window_title,
         XCreateColormap(dpy, root_window, vinfo.visual, AllocNone);
     window_attributes.event_mask = StructureNotifyMask | KeyPressMask
                                    | KeyReleaseMask | PointerMotionMask
-                                   | ButtonPressMask | ButtonReleaseMask;
+                                   | ButtonPressMask | ButtonReleaseMask
+                                   | EnterWindowMask | LeaveWindowMask;
     window_attributes.bit_gravity = StaticGravity;
 
-    Window window =
+    window =
         XCreateWindow(dpy,
                       root_window,
                       0,
@@ -213,7 +215,7 @@ bool platform_opengl_init(const char* window_title,
 
     if (isGLXExtensionPresent(default_screen, "GLX_EXT_swap_control"))
     {
-        glXSwapIntervalEXT(dpy, glxWindow, -1);
+        glXSwapIntervalEXT(dpy, glxWindow, 0);
     }
     else
     {
@@ -283,12 +285,17 @@ bool platform_opengl_init(const char* window_title,
     return true;
 }
 
-void platform_handle_input_event(platform_input_info_t* input)
+void platform_handle_input_events(platform_input_info_t* input)
 {
     while (XPending(dpy))
     {
         XEvent evt;
+
         XNextEvent(dpy, &evt);
+        if (XFilterEvent(&evt, window))
+        {
+            continue;
+        }
 
         switch (evt.type)
         {

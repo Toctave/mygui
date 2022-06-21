@@ -17,12 +17,7 @@ int main(int argc, const char** argv)
     // main loop
     while (!input.should_exit)
     {
-        platform_handle_input_event(&input);
-
-        printf("%d %d\n", input.mouse_x, input.mouse_y);
-
-        glClearColor(1, 0, 1, 1);
-        glClear(GL_COLOR_BUFFER_BIT);
+        platform_handle_input_events(&input);
 
         platform_swap_buffers();
     }

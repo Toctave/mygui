@@ -113,7 +113,6 @@ void log_terminate()
 
 static void vlog_continue(const char* fmt, va_list args)
 {
-    log_message_t* message = &messages[message_count - 1];
     int length = vsprintf(cursor, fmt, args);
 
     for (int i = 0; i < length; i++)

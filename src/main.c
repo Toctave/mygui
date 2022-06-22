@@ -1,9 +1,11 @@
+#include <GL/gl.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 #include "assert.h"
 #include "logging.h"
 #include "memory.h"
+#include "opengl_functions.h"
 #include "platform.h"
 #include "util.h"
 
@@ -177,13 +179,34 @@ void renderer_init(renderer_t* renderer)
     glGenBuffers(1, &renderer->vbo);
     glGenVertexArrays(1, &renderer->vao);
 
-    renderer->shader = compile_shader("shader.vs", "./shader.fs");
+    renderer->shader = compile_shader("shader.vs", "shader.fs");
+
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->vbo);
+    // clang-format off
+    float data[] = {
+        -1.0f, -1.0f,
+        -1.0f, 1.0f,
+        1.0f, -1.0f,
+        1.0f, 1.0f,
+    };
+    // clang-format on
+    glBufferData(GL_ARRAY_BUFFER, sizeof(data), data, GL_STATIC_DRAW);
+
+    glBindVertexArray(renderer->vao);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0); // position
 }
 
-void render(renderer_t* renderer)
+void render(renderer_t* renderer, uint32_t width, uint32_t height)
 {
+    glViewport(0, 0, width, height);
+
     glClearColor(1, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    glUseProgram(renderer->shader);
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
 int main(int argc, const char** argv)
@@ -210,7 +233,8 @@ int main(int argc, const char** argv)
     {
         platform_handle_input_events(&input);
 
-        render(&renderer);
+        render(&renderer, input.width, input.height);
+        log_debug("width = %d, height = %d", input.width, input.height);
 
         platform_swap_buffers();
     }

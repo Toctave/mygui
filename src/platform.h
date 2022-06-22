@@ -10,6 +10,9 @@ typedef struct platform_input_info_t
     bool should_exit;
     int mouse_x;
     int mouse_y;
+
+    uint32_t width;
+    uint32_t height;
 } platform_input_info_t;
 
 typedef struct platform_file_t platform_file_t;

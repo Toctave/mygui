@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include <GL/glx.h>
+#include <X11/Xlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -291,6 +292,13 @@ bool platform_opengl_init(const char* window_title,
 void platform_handle_input_events(platform_input_info_t* input)
 {
     memset(input, 0, sizeof(*input));
+
+    XWindowAttributes attrs;
+    XGetWindowAttributes(dpy, window, &attrs);
+
+    input->width = attrs.width;
+    input->height = attrs.height;
+
     while (XPending(dpy))
     {
         XEvent evt;

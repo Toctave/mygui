@@ -2,6 +2,7 @@
 
 #include <GL/glx.h>
 #include <stdio.h>
+#include <string.h>
 
 // Global variables
 static Display* dpy;
@@ -24,6 +25,7 @@ static Atom WM_DELETE_WINDOW;
     gl##name =                                                                 \
         (rtype(*)(__VA_ARGS__))glXGetProcAddress((const GLubyte*)"gl" #name);
 
+FOR_ALL_GL_FUNCTIONS(DO_DECLARE_GL_FUNCTION)
 FOR_ALL_GLX_FUNCTIONS(DO_DECLARE_GL_FUNCTION)
 
 static bool startsWith(const char* text, const char* to_find)
@@ -71,6 +73,7 @@ bool platform_opengl_init(const char* window_title,
                           uint32_t height)
 {
     FOR_ALL_GLX_FUNCTIONS(DO_LOAD_GL_FUNCTION);
+    FOR_ALL_GL_FUNCTIONS(DO_LOAD_GL_FUNCTION);
 
     dpy = XOpenDisplay(0);
     if (!dpy)
@@ -287,6 +290,7 @@ bool platform_opengl_init(const char* window_title,
 
 void platform_handle_input_events(platform_input_info_t* input)
 {
+    memset(input, 0, sizeof(*input));
     while (XPending(dpy))
     {
         XEvent evt;

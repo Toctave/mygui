@@ -960,6 +960,9 @@ struct
 
     uint64_t active_id;
     uint64_t hovered_id;
+
+    uint64_t id_stack[1024];
+    uint32_t id_stack_height;
 } ui;
 
 bool mouse_inside_region(float x, float y, float width, float height)
@@ -968,9 +971,52 @@ bool mouse_inside_region(float x, float y, float width, float height)
            && ui.input->mouse_y >= y && ui.input->mouse_y < y + height;
 }
 
+static uint64_t hash_combine(uint64_t base, uint64_t new)
+{
+    return base * 37 + new;
+}
+
+static void ui_push_id(uint64_t id)
+{
+    ASSERT(ui.id_stack_height < ARRAY_COUNT(ui.id_stack));
+    uint64_t hashed =
+        ui.id_stack_height
+            ? hash_combine(ui.id_stack[ui.id_stack_height - 1], id)
+            : id;
+    ui.id_stack[ui.id_stack_height++] = hashed;
+}
+
+static void ui_pop_id()
+{
+    ASSERT(ui.id_stack_height);
+    ui.id_stack_height--;
+}
+
+static uint64_t hash_string(const char* txt)
+{
+    uint64_t h = 1;
+    char c;
+    while ((c = *txt++))
+    {
+        h = hash_combine(h, c);
+    }
+
+    return h;
+}
+
+static void ui_push_string_id(const char* txt) { ui_push_id(hash_string(txt)); }
+
+static uint64_t ui_current_id()
+{
+    ASSERT(ui.id_stack_height);
+
+    return ui.id_stack[ui.id_stack_height - 1];
+}
+
 bool button(const char* txt)
 {
-    uint64_t id = (uint64_t)txt;
+    ui_push_string_id(txt);
+
     float x = ui.cursor_x;
     float y = ui.cursor_y;
     float width = ui.renderer->font.bbox.extent[0] * strlen(txt) + 8;
@@ -978,20 +1024,22 @@ bool button(const char* txt)
 
     if (mouse_inside_region(x, y, width, height))
     {
-        ui.hovered_id = id;
+        ui.hovered_id = ui_current_id();
     }
     else
     {
         ui.hovered_id = 0;
     }
 
-    if (ui.hovered_id == id && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT))
+    if (ui.hovered_id == ui_current_id()
+        && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT))
     {
-        ui.active_id = id;
+        ui.active_id = ui_current_id();
     }
 
     bool result = false;
-    if (ui.active_id == id && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
+    if (ui.active_id == ui_current_id()
+        && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
     {
         ui.active_id = 0;
         result = true;
@@ -1002,11 +1050,11 @@ bool button(const char* txt)
     float col_base[3] = {0, 0, 1};
 
     float* col;
-    if (ui.active_id == id)
+    if (ui.active_id == ui_current_id())
     {
         col = col_held;
     }
-    else if (ui.hovered_id == id)
+    else if (ui.hovered_id == ui_current_id())
     {
         col = col_hovered;
     }
@@ -1024,6 +1072,7 @@ bool button(const char* txt)
 
     ui.cursor_y += height + 4;
 
+    ui_pop_id();
     return result;
 }
 
@@ -1068,7 +1117,11 @@ int main(int argc, const char** argv)
         ui.cursor_x = 10;
         ui.cursor_y = 10;
 
-        if (button("The quick brown fox jumps over the lazy dog."))
+        ui_push_id(64);
+        button("1");
+        ui_pop_id();
+
+        if (button("1"))
         {
             glyph_index++;
         }

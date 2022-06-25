@@ -69,9 +69,7 @@ static bool isGLXExtensionPresent(int screen, const char* extensionName)
     return false;
 }
 
-bool platform_opengl_init(const char* window_title,
-                          uint32_t width,
-                          uint32_t height)
+bool platform_init(const char* window_title, uint32_t width, uint32_t height)
 {
     FOR_ALL_GLX_FUNCTIONS(DO_LOAD_GL_FUNCTION);
     FOR_ALL_GL_FUNCTIONS(DO_LOAD_GL_FUNCTION);
@@ -289,15 +287,30 @@ bool platform_opengl_init(const char* window_title,
     return true;
 }
 
+static uint32_t button_mask(int index)
+{
+    if (index >= Button1 && index <= Button3)
+    {
+        return 1 << (index - Button1);
+    }
+    else
+    {
+        return 0;
+    }
+}
+
 void platform_handle_input_events(platform_input_info_t* input)
 {
-    memset(input, 0, sizeof(*input));
+    /* memset(input, 0, sizeof(*input)); */
 
     XWindowAttributes attrs;
     XGetWindowAttributes(dpy, window, &attrs);
 
     input->width = attrs.width;
     input->height = attrs.height;
+
+    input->mouse_pressed = 0;
+    input->mouse_released = 0;
 
     while (XPending(dpy))
     {
@@ -323,6 +336,12 @@ void platform_handle_input_events(platform_input_info_t* input)
         case MotionNotify:
             input->mouse_x = evt.xmotion.x;
             input->mouse_y = evt.xmotion.y;
+            break;
+        case ButtonPress:
+            input->mouse_pressed |= button_mask(evt.xbutton.button);
+            break;
+        case ButtonRelease:
+            input->mouse_released |= button_mask(evt.xbutton.button);
             break;
         }
     }

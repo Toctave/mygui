@@ -57,6 +57,13 @@
     X(UniformMatrix4fv, void, GLint, GLsizei, GLboolean, const GLfloat*)       \
     X(UniformMatrix4x2fv, void, GLint, GLsizei, GLboolean, const GLfloat*)     \
     X(UniformMatrix4x3fv, void, GLint, GLsizei, GLboolean, const GLfloat*)     \
+    X(TexStorage2D,                                                            \
+      void,                                                                    \
+      GLenum target,                                                           \
+      GLsizei levels,                                                          \
+      GLenum internalformat,                                                   \
+      GLsizei width,                                                           \
+      GLsizei height)                                                          \
     X(UseProgram, void, GLuint)                                                \
     X(VertexAttribPointer,                                                     \
       void,                                                                    \

@@ -11,3 +11,5 @@
 #define Tera(v) (1000ull * Giga(v))
 
 #define ARRAY_COUNT(arr) (sizeof(arr) / sizeof(arr[0]))
+
+#define offsetof(type, member) ((uint8_t*)((type*)0)->member - (uint8_t*)0)

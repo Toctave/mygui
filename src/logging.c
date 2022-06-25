@@ -100,12 +100,18 @@ static void finish_message()
     writing_message = false;
 }
 
-void log_terminate()
+void log_flush()
 {
     if (writing_message)
     {
         finish_message();
     }
+}
+
+void log_terminate()
+{
+    log_flush();
+
     platform_virtual_free(buffer, BUFFER_SIZE);
     platform_virtual_free(messages, BUFFER_SIZE);
     platform_virtual_free(line_indices, BUFFER_SIZE);
@@ -130,10 +136,7 @@ static void vlog_continue(const char* fmt, va_list args)
 
 static void vlog_message(log_severity_e severity, const char* fmt, va_list args)
 {
-    if (message_count > 0)
-    {
-        finish_message();
-    }
+    log_flush();
 
     ASSERT(!writing_message);
     writing_message = true;
@@ -148,6 +151,10 @@ static void vlog_message(log_severity_e severity, const char* fmt, va_list args)
 
 void log_message(log_severity_e severity, const char* fmt, ...)
 {
+    if (severity >= ERROR)
+    {
+        BREAKPOINT();
+    }
     va_list args;
     va_start(args, fmt);
 

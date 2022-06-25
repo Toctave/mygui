@@ -7,4 +7,6 @@ sources="src/main.c src/logging.c src/memory.c src/platform_glx.c src/platform_l
 libs="-lGLX -lX11 -lGL"
 warnings="-Wall -Wextra -Wpedantic"
 
+cp -r src/shaders build/
+cp -r assets build/
 $compiler $common_flags $warnings $sources -o build/mygui $libs

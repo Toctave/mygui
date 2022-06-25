@@ -25,6 +25,7 @@
                   __LINE__,                                                    \
                   __func__,                                                    \
                   __VA_ARGS__);                                                \
+        log_flush();                                                           \
         BREAKPOINT();                                                          \
         raise(SIGKILL);                                                        \
     }

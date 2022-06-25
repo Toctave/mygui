@@ -5,11 +5,21 @@
 
 #include "opengl_functions.h"
 
+enum
+{
+    MOUSE_BUTTON_LEFT = 1 << 0,
+    MOUSE_BUTTON_MIDDLE = 1 << 1,
+    MOUSE_BUTTON_RIGHT = 1 << 2,
+};
+
 typedef struct platform_input_info_t
 {
     bool should_exit;
+
     int mouse_x;
     int mouse_y;
+    uint32_t mouse_pressed;
+    uint32_t mouse_released;
 
     uint32_t width;
     uint32_t height;
@@ -18,9 +28,7 @@ typedef struct platform_input_info_t
 typedef struct platform_file_t platform_file_t;
 
 void platform_handle_input_events(platform_input_info_t* input);
-bool platform_opengl_init(const char* window_title,
-                          uint32_t width,
-                          uint32_t height);
+bool platform_init(const char* window_title, uint32_t width, uint32_t height);
 void platform_swap_buffers();
 
 bool platform_running_under_debugger();

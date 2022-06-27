@@ -991,6 +991,19 @@ struct
 
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
+
+    struct
+    {
+        color_t main;
+        color_t secondary;
+        color_t text;
+        color_t text_shadow;
+        color_t active_overlay;
+        color_t hover_overlay;
+    } colors;
+
+    uint32_t margin;
+    uint32_t line_height;
 } ui;
 
 bool mouse_inside_region(float x, float y, float width, float height)
@@ -1068,55 +1081,100 @@ float clamped_float(float t, float min, float max)
     }
 }
 
-bool slider(const char* txt, float* value)
+bool ui_current_is_hovered() { return ui.hovered_id == ui_current_id(); }
+
+void ui_make_current_hovered() { ui.hovered_id = ui_current_id(); }
+
+bool ui_current_is_active() { return ui.active_id == ui_current_id(); }
+
+void ui_make_current_active() { ui.active_id = ui_current_id(); }
+
+float lerp(float t, float min, float max) { return min + t * (max - min); }
+
+float unlerp(float t, float min, float max) { return (t - min) / (max - min); }
+
+void ui_newline() { ui.cursor_y += ui.line_height + ui.margin; }
+
+bool slider(const char* txt, float* value, float min, float max)
 {
     ui_push_string_id(txt);
 
+    float value_01 = unlerp(*value, min, max);
+
     bool changed = false;
 
+    uint32_t box_width = 200;
+    uint32_t box_height = ui.line_height;
     int32_t box_x = ui.cursor_x;
     int32_t box_y = ui.cursor_y;
-    uint32_t box_width = 200;
-    uint32_t box_height = ui.renderer->font.bbox.extent[1] + 8;
 
-    uint32_t margin = 3;
-    int32_t knob_width = box_height - 2 * margin;
-    int32_t knob_height = knob_width;
-    int32_t knob_range = (box_width - 2 * margin - knob_width);
-    int32_t knob_x = box_x + margin + *value * knob_range;
+    uint32_t margin = 0;
+    int32_t knob_height = box_height - 2 * margin;
+    int32_t knob_range = (box_width - 2 * margin);
+    int32_t knob_width = lerp(value_01, 0, knob_range);
     int32_t knob_y = box_y + margin;
 
     if (mouse_inside_region(box_x, box_y, box_width, box_height))
     {
-        ui.hovered_id = ui_current_id();
+        ui_make_current_hovered();
     }
 
-    if (ui.hovered_id == ui_current_id()
+    if (ui_current_is_hovered()
         && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT))
     {
         ui.active_id = ui_current_id();
     }
 
-    if (ui.active_id == ui_current_id()
+    if (ui_current_is_active()
         && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
     {
         ui.active_id = 0;
     }
 
-    if (ui.active_id == ui_current_id())
+    if (ui_current_is_active())
     {
-        *value += (float)ui.input->mouse_dx / knob_range;
-        *value = clamped_float(*value, 0.0f, 1.0f);
+        value_01 += (float)ui.input->mouse_dx / knob_range;
+        value_01 = clamped_float(value_01, 0.0f, 1.0f);
+
+        *value = lerp(value_01, min, max);
+        changed = (ui.input->mouse_dx != 0);
     }
 
     draw_colored_quad(ui.renderer,
                       (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
-                      color_gray(0x40));
-    draw_colored_quad(ui.renderer,
-                      (quad_i32_t){{knob_x, knob_y}, {knob_width, knob_height}},
-                      color_gray(0x80));
+                      ui.colors.secondary);
+    draw_colored_quad(
+        ui.renderer,
+        (quad_i32_t){{box_x + margin, knob_y}, {knob_width, knob_height}},
+        ui.colors.main);
+
+    char value_txt[256];
+    snprintf(value_txt, sizeof(value_txt), "%.3f", *value);
+
+    draw_shadowed_text(ui.renderer,
+                       value_txt,
+                       box_x + 4,
+                       box_y + 1,
+                       ui.colors.text,
+                       ui.colors.text_shadow);
+
+    if (ui_current_is_active())
+    {
+        draw_colored_quad(ui.renderer,
+                          (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
+                          ui.colors.active_overlay);
+    }
+    else if (ui_current_is_hovered())
+    {
+        draw_colored_quad(ui.renderer,
+
+                          (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
+                          ui.colors.hover_overlay);
+    }
 
     ui_pop_id();
+
+    ui_newline();
 
     return changed;
 }
@@ -1125,10 +1183,10 @@ bool button(const char* txt)
 {
     ui_push_string_id(txt);
 
-    float x = ui.cursor_x;
-    float y = ui.cursor_y;
     float width = ui.renderer->font.bbox.extent[0] * strlen(txt) + 8;
     float height = ui.renderer->font.bbox.extent[1] + 8;
+    float x = ui.cursor_x;
+    float y = ui.cursor_y;
 
     if (mouse_inside_region(x, y, width, height))
     {
@@ -1154,32 +1212,47 @@ bool button(const char* txt)
     }
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
-    draw_colored_quad(ui.renderer, pos_quad, color_gray(0x60));
+    draw_colored_quad(ui.renderer, pos_quad, ui.colors.main);
 
     if (ui.active_id == ui_current_id())
     {
-        draw_colored_quad(ui.renderer,
-                          pos_quad,
-                          color_rgba(0x00, 0x00, 0x00, 0x40));
+        draw_colored_quad(ui.renderer, pos_quad, ui.colors.active_overlay);
     }
     else if (ui.hovered_id == ui_current_id())
     {
-        draw_colored_quad(ui.renderer,
-                          pos_quad,
-                          color_rgba(0xFF, 0xFF, 0xFF, 0x40));
+        draw_colored_quad(ui.renderer, pos_quad, ui.colors.hover_overlay);
     }
 
     draw_shadowed_text(ui.renderer,
                        txt,
-                       x + 5,
-                       y + 2,
-                       color_gray(0xFF),
-                       color_gray(0x40));
-
-    ui.cursor_y += height + 4;
+                       x + 4,
+                       y + 1,
+                       ui.colors.text,
+                       ui.colors.text_shadow);
 
     ui_pop_id();
+
+    ui_newline();
+
     return result;
+}
+
+static void ui_init(renderer_t* renderer, platform_input_info_t* input)
+{
+    ui.renderer = renderer;
+    ui.input = input;
+
+    ui.colors.main = color_gray(0x60);
+    ui.colors.secondary = color_gray(0x30);
+
+    ui.colors.text = color_gray(0xFF);
+    ui.colors.text_shadow = color_gray(0x40);
+
+    ui.colors.hover_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
+    ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
+
+    ui.line_height = ui.renderer->font.bbox.extent[1] + 8;
+    ui.margin = 4;
 }
 
 int main(int argc, const char** argv)
@@ -1207,23 +1280,22 @@ int main(int argc, const char** argv)
 
     platform_input_info_t input = {0};
 
-    ui.renderer = &renderer;
-    ui.input = &input;
+    ui_init(&renderer, &input);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     uint32_t glyph_index = 70;
 
-    float x;
+    float x, y;
 
     // main loop
     while (!input.should_exit)
     {
         platform_handle_input_events(&input);
 
-        ui.cursor_x = 10;
-        ui.cursor_y = 10;
+        ui.cursor_x = ui.margin;
+        ui.cursor_y = ui.margin;
 
         ui_push_id(64);
         button("1");
@@ -1237,7 +1309,15 @@ int main(int argc, const char** argv)
         {
         }
 
-        slider("val", &x);
+        if (slider("val", &x, 0.0f, 10.0f))
+        {
+            log_debug("x = %f", x);
+        }
+
+        if (slider("val2", &y, 0.0f, 10.0f))
+        {
+            log_debug("y = %f", y);
+        }
 
         log_flush();
 

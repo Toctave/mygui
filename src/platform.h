@@ -16,8 +16,11 @@ typedef struct platform_input_info_t
 {
     bool should_exit;
 
-    int mouse_x;
-    int mouse_y;
+    int32_t mouse_x;
+    int32_t mouse_y;
+    int32_t mouse_dx;
+    int32_t mouse_dy;
+
     uint32_t mouse_pressed;
     uint32_t mouse_released;
 

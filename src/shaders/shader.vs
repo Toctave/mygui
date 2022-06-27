@@ -2,11 +2,11 @@
 
 in vec2 pixelPosition;
 in vec2 uv;
-in vec3 color;
+in vec4 color;
 
 out vec2 vPosition;
 out vec2 vUV;
-out vec3 vColor;
+out vec4 vColor;
 
 uniform sampler2D tex;
 

@@ -312,6 +312,12 @@ void platform_handle_input_events(platform_input_info_t* input)
     input->mouse_pressed = 0;
     input->mouse_released = 0;
 
+    input->mouse_dx = 0;
+    input->mouse_dy = 0;
+
+    int32_t prev_x = input->mouse_x;
+    int32_t prev_y = input->mouse_y;
+
     while (XPending(dpy))
     {
         XEvent evt;
@@ -336,6 +342,8 @@ void platform_handle_input_events(platform_input_info_t* input)
         case MotionNotify:
             input->mouse_x = evt.xmotion.x;
             input->mouse_y = evt.xmotion.y;
+            input->mouse_dx = input->mouse_x - prev_x;
+            input->mouse_dy = input->mouse_y - prev_y;
             break;
         case ButtonPress:
             input->mouse_pressed |= button_mask(evt.xbutton.button);

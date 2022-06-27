@@ -24,11 +24,16 @@ typedef struct quad_float_t
     float extent[2];
 } quad_float_t;
 
+typedef struct color_t
+{
+    uint8_t rgba[4];
+} color_t;
+
 typedef struct vertex_t
 {
     float position[2];
     float uv[2];
-    float color[3];
+    uint8_t color[4];
 } vertex_t;
 
 typedef enum shader_stage_e
@@ -78,6 +83,24 @@ typedef struct renderer_t
 
     uint32_t quad_count;
 } renderer_t;
+
+color_t color_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+{
+    color_t result;
+    result.rgba[0] = r;
+    result.rgba[1] = g;
+    result.rgba[2] = b;
+    result.rgba[3] = a;
+
+    return result;
+}
+
+color_t color_rgb(uint8_t r, uint8_t g, uint8_t b)
+{
+    return color_rgba(r, g, b, 0xFF);
+}
+
+color_t color_gray(uint8_t w) { return color_rgb(w, w, w); }
 
 static const char* get_next_line(const char* current)
 {
@@ -806,9 +829,9 @@ void renderer_init(mem_stack_allocator_t* tmp,
     // color
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2,
-                          3,
-                          GL_FLOAT,
-                          GL_FALSE,
+                          4,
+                          GL_UNSIGNED_BYTE,
+                          GL_TRUE,
                           sizeof(vertex_t),
                           (void*)offsetof(vertex_t, color));
 
@@ -827,14 +850,14 @@ void renderer_init(mem_stack_allocator_t* tmp,
 void draw_quad(renderer_t* renderer,
                quad_i32_t pos,
                quad_float_t uv,
-               float color[3])
+               color_t color)
 {
     vertex_t* vertices = &renderer->vertex_data[4 * renderer->quad_count];
     uint32_t* indices = &renderer->index_data[6 * renderer->quad_count];
 
     for (int i = 0; i < 4; i++)
     {
-        memcpy(vertices[i].color, color, 3 * sizeof(float));
+        memcpy(vertices[i].color, color.rgba, sizeof(color.rgba));
     }
 
     vertices[0].position[0] = pos.min[0];
@@ -866,11 +889,16 @@ void draw_quad(renderer_t* renderer,
     renderer->quad_count++;
 }
 
+void draw_colored_quad(renderer_t* renderer, quad_i32_t pos, color_t color)
+{
+    draw_quad(renderer, pos, (quad_float_t){0}, color);
+}
+
 void draw_glyph(renderer_t* renderer,
                 uint32_t glyph_index,
                 int32_t x,
                 int32_t y,
-                float color[3])
+                color_t color)
 {
     font_glyph_t* glyph = &renderer->font.glyphs[glyph_index];
     quad_float_t uv = {0};
@@ -908,7 +936,7 @@ void draw_text(renderer_t* renderer,
                const char* text,
                int32_t x,
                int32_t y,
-               float color[3])
+               color_t color)
 {
     x += renderer->font.bbox.extent[0];
 
@@ -1013,6 +1041,86 @@ static uint64_t ui_current_id()
     return ui.id_stack[ui.id_stack_height - 1];
 }
 
+static void draw_shadowed_text(renderer_t* renderer,
+                               const char* text,
+                               int32_t x,
+                               int32_t y,
+                               color_t text_color,
+                               color_t shadow_color)
+{
+    draw_text(renderer, text, x + 1, y + 1, shadow_color);
+    draw_text(renderer, text, x, y, text_color);
+}
+
+float clamped_float(float t, float min, float max)
+{
+    if (t < min)
+    {
+        return min;
+    }
+    else if (t > max)
+    {
+        return max;
+    }
+    else
+    {
+        return t;
+    }
+}
+
+bool slider(const char* txt, float* value)
+{
+    ui_push_string_id(txt);
+
+    bool changed = false;
+
+    int32_t box_x = ui.cursor_x;
+    int32_t box_y = ui.cursor_y;
+    uint32_t box_width = 200;
+    uint32_t box_height = ui.renderer->font.bbox.extent[1] + 8;
+
+    uint32_t margin = 3;
+    int32_t knob_width = box_height - 2 * margin;
+    int32_t knob_height = knob_width;
+    int32_t knob_range = (box_width - 2 * margin - knob_width);
+    int32_t knob_x = box_x + margin + *value * knob_range;
+    int32_t knob_y = box_y + margin;
+
+    if (mouse_inside_region(box_x, box_y, box_width, box_height))
+    {
+        ui.hovered_id = ui_current_id();
+    }
+
+    if (ui.hovered_id == ui_current_id()
+        && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT))
+    {
+        ui.active_id = ui_current_id();
+    }
+
+    if (ui.active_id == ui_current_id()
+        && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
+    {
+        ui.active_id = 0;
+    }
+
+    if (ui.active_id == ui_current_id())
+    {
+        *value += (float)ui.input->mouse_dx / knob_range;
+        *value = clamped_float(*value, 0.0f, 1.0f);
+    }
+
+    draw_colored_quad(ui.renderer,
+                      (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
+                      color_gray(0x40));
+    draw_colored_quad(ui.renderer,
+                      (quad_i32_t){{knob_x, knob_y}, {knob_width, knob_height}},
+                      color_gray(0x80));
+
+    ui_pop_id();
+
+    return changed;
+}
+
 bool button(const char* txt)
 {
     ui_push_string_id(txt);
@@ -1045,30 +1153,28 @@ bool button(const char* txt)
         result = true;
     }
 
-    float col_held[3] = {0, 0, .5};
-    float col_hovered[3] = {.3, .3, 1};
-    float col_base[3] = {0, 0, 1};
+    quad_i32_t pos_quad = {{x, y}, {width, height}};
+    draw_colored_quad(ui.renderer, pos_quad, color_gray(0x60));
 
-    float* col;
     if (ui.active_id == ui_current_id())
     {
-        col = col_held;
+        draw_colored_quad(ui.renderer,
+                          pos_quad,
+                          color_rgba(0x00, 0x00, 0x00, 0x40));
     }
     else if (ui.hovered_id == ui_current_id())
     {
-        col = col_hovered;
-    }
-    else
-    {
-        col = col_base;
+        draw_colored_quad(ui.renderer,
+                          pos_quad,
+                          color_rgba(0xFF, 0xFF, 0xFF, 0x40));
     }
 
-    draw_quad(ui.renderer,
-              (quad_i32_t){{x, y}, {width, height}},
-              (quad_float_t){0},
-              col);
-    draw_text(ui.renderer, txt, x + 5, y + 2, (float[3]){.25f, .25f, .25f});
-    draw_text(ui.renderer, txt, x + 4, y + 1, (float[3]){1, 1, 1});
+    draw_shadowed_text(ui.renderer,
+                       txt,
+                       x + 5,
+                       y + 2,
+                       color_gray(0xFF),
+                       color_gray(0x40));
 
     ui.cursor_y += height + 4;
 
@@ -1109,6 +1215,8 @@ int main(int argc, const char** argv)
 
     uint32_t glyph_index = 70;
 
+    float x;
+
     // main loop
     while (!input.should_exit)
     {
@@ -1128,6 +1236,8 @@ int main(int argc, const char** argv)
         if (button("Undo the thingy"))
         {
         }
+
+        slider("val", &x);
 
         log_flush();
 

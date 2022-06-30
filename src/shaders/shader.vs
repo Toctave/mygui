@@ -9,9 +9,11 @@ out vec2 vUV;
 out vec4 vColor;
 
 uniform sampler2D tex;
+uniform uint width;
+uniform uint height;
 
 void main() {
-    vPosition = 2 * pixelPosition / vec2(640, 480) - 1;
+    vPosition = 2 * pixelPosition / vec2(width, height) - 1;
     vPosition.y = -vPosition.y;
     
     gl_Position = vec4(vPosition, 0, 1);

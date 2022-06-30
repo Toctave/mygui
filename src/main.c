@@ -972,6 +972,9 @@ void render(renderer_t* renderer, uint32_t width, uint32_t height)
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(renderer->shader);
+    glUniform1ui(glGetUniformLocation(renderer->shader, "width"), width);
+    glUniform1ui(glGetUniformLocation(renderer->shader, "height"), height);
+
     glBindVertexArray(renderer->vao);
 
     glDrawElements(GL_TRIANGLES, renderer->quad_count * 6, GL_UNSIGNED_INT, 0);

@@ -3,10 +3,12 @@
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "assert.h"
+#include "hash.h"
 #include "logging.h"
 #include "memory.h"
 #include "opengl_functions.h"
@@ -493,10 +495,10 @@ bool load_bdf(mem_stack_allocator_t* tmp,
     const char* line = bdf;
 
     bool in_properties = false;
-    bool in_bitmap = false;
     bool in_char = false;
 
     bool bbox_read = false;
+    (void)bbox_read;
 
     int32_t character_count = 0;
     bool character_count_read = false;
@@ -506,6 +508,7 @@ bool load_bdf(mem_stack_allocator_t* tmp,
 
     int32_t size[3];
     bool size_read = false;
+    (void)size_read;
 
     while (*line)
     {
@@ -712,7 +715,7 @@ bool load_bdf(mem_stack_allocator_t* tmp,
         else
         {
             log_warning("Unhandled line %.*s",
-                        get_next_line(line) - line,
+                        (int)(get_next_line(line) - line),
                         line);
         }
 
@@ -890,6 +893,64 @@ void draw_quad(renderer_t* renderer,
     renderer->quad_count++;
 }
 
+void draw_line(renderer_t* renderer,
+               float x1,
+               float y1,
+               float x2,
+               float y2,
+               float width,
+               color_t color)
+{
+    vertex_t* vertices = &renderer->vertex_data[4 * renderer->quad_count];
+    uint32_t* indices = &renderer->index_data[6 * renderer->quad_count];
+
+    for (int i = 0; i < 4; i++)
+    {
+        memcpy(vertices[i].color, color.rgba, sizeof(color.rgba));
+    }
+
+    float lx = (x2 - x1);
+    float ly = (y2 - y1);
+    float length = sqrtf(lx * lx + ly * ly);
+
+    // normal
+    float nx = -ly / length;
+    float ny = lx / length;
+
+    // offset from center line
+    float dx = .5f * width * nx;
+    float dy = .5f * width * ny;
+
+    vertices[0].position[0] = x1 - dx;
+    vertices[0].position[1] = y1 - dy;
+    vertices[1].position[0] = x1 + dx;
+    vertices[1].position[1] = y1 + dy;
+
+    vertices[2].position[0] = x2 + dx;
+    vertices[2].position[1] = y2 + dy;
+    vertices[3].position[0] = x2 - dx;
+    vertices[3].position[1] = y2 - dy;
+
+    vertices[0].uv[0] = 0.0f;
+    vertices[0].uv[1] = 0.0f;
+    vertices[1].uv[0] = 0.0f;
+    vertices[1].uv[1] = 0.0f;
+    vertices[2].uv[0] = 0.0f;
+    vertices[2].uv[1] = 0.0f;
+    vertices[3].uv[0] = 0.0f;
+    vertices[3].uv[1] = 0.0f;
+
+    uint32_t v = renderer->quad_count * 4;
+    indices[0] = v + 0;
+    indices[1] = v + 1;
+    indices[2] = v + 2;
+    indices[3] = v + 0;
+    indices[4] = v + 2;
+    indices[5] = v + 3;
+
+    renderer->quad_count++;
+}
+
 void draw_colored_quad(renderer_t* renderer, quad_i32_t pos, color_t color)
 {
     draw_quad(renderer, pos, (quad_float_t){0}, color);
@@ -997,6 +1058,7 @@ struct
 
     uint64_t active_id;
     uint64_t hovered_id;
+    uint64_t dropped_id;
 
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
@@ -1027,23 +1089,6 @@ bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
 {
     return ui.input->mouse_x >= x && ui.input->mouse_x < x + width //
            && ui.input->mouse_y >= y && ui.input->mouse_y < y + height;
-}
-
-static uint64_t hash_combine(uint64_t base, uint64_t new)
-{
-    return base * 37 + new;
-}
-
-static uint64_t hash_string(const char* txt)
-{
-    uint64_t h = 1;
-    char c;
-    while ((c = *txt++))
-    {
-        h = hash_combine(h, c);
-    }
-
-    return h;
 }
 
 static void ui_push_id(uint64_t id)
@@ -1283,7 +1328,8 @@ bool ui_button(const char* txt)
 {
     ui_push_string_id(txt);
 
-    int32_t width = ui.renderer->font.bbox.extent[0] * strlen(txt) + 8;
+    int32_t width =
+        ui.renderer->font.bbox.extent[0] * strlen(txt) + 2 * ui.padding;
     int32_t height = ui.line_height;
     int32_t x = ui.cursor_x;
     int32_t y = ui.cursor_y;
@@ -1309,19 +1355,19 @@ void ui_init(renderer_t* renderer, platform_input_info_t* input)
     ui.renderer = renderer;
     ui.input = input;
 
-    ui.colors.main = color_gray(0x60);
+    ui.colors.main = color_gray(0x50);
     ui.colors.secondary = color_gray(0x30);
-    ui.colors.background = color_gray(0xB0);
+    ui.colors.background = color_gray(0x20);
 
     ui.colors.text = color_gray(0xFF);
-    ui.colors.text_shadow = color_gray(0x40);
+    ui.colors.text_shadow = color_gray(0x00);
 
     ui.colors.hover_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
     ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
 
-    ui.padding = 4;
+    ui.padding = 6;
     ui.line_height = ui.renderer->font.bbox.extent[1] + 2 * ui.padding;
-    ui.margin = 2;
+    ui.margin = 4;
 
     ui_push_id(1);
 }
@@ -1339,7 +1385,7 @@ void ui_begin_node(const char* name, ui_node_t* node)
     int32_t x = node->bbox.min[0];
     int32_t y = node->bbox.min[1];
     uint32_t width = node->bbox.extent[0];
-    /* uint32_t height = node->bbox.extent[1]; */
+    /* uint32_t height = node->bbox.extent.height; */
 
     draw_colored_quad(ui.renderer, node->bbox, ui.colors.background);
     draw_colored_quad(ui.renderer,
@@ -1365,8 +1411,29 @@ void ui_end_node()
     int32_t dx, dy;
     if (ui_handle_drag(x, y, width, height, &dx, &dy))
     {
-        node->bbox.min[0] += dx;
-        node->bbox.min[1] += dy;
+        uint32_t border_width = 5;
+        int32_t xprev = ui.input->mouse_x - ui.input->mouse_dx;
+        int32_t yprev = ui.input->mouse_y - ui.input->mouse_dy;
+
+        bool on_horizontal_border = x + width - xprev <= border_width;
+        bool on_vertical_border = y + height - yprev <= border_width;
+
+        if (on_horizontal_border || on_vertical_border)
+        {
+            if (on_horizontal_border)
+            {
+                node->bbox.extent[0] += dx;
+            }
+            if (on_vertical_border)
+            {
+                node->bbox.extent[1] += dy;
+            }
+        }
+        else
+        {
+            node->bbox.min[0] += dx;
+            node->bbox.min[1] += dy;
+        }
     }
 
     ui_end_draw_region();
@@ -1376,10 +1443,59 @@ void ui_end_node()
     ui.current_node_name = 0;
 }
 
+void ui_plug(const char* name)
+{
+    ui_push_string_id(name);
+    ASSERT(ui.current_node);
+
+    uint32_t draw_width = 10;
+    uint32_t hover_width = 30;
+    int32_t draw_x = ui.cursor_x - draw_width;
+    int32_t draw_y = ui.cursor_y + ui.line_height / 2 - draw_width / 2;
+
+    int32_t hover_x = ui.cursor_x - draw_width / 2 - hover_width / 2;
+    int32_t hover_y = ui.cursor_y + ui.line_height / 2 - hover_width / 2;
+
+    draw_colored_quad(ui.renderer,
+                      (quad_i32_t){{draw_x, draw_y}, {draw_width, draw_width}},
+                      color_rgb(0xFF, 0x00, 0x00));
+
+    ui_draw_text(name, ui.cursor_x, ui.cursor_y);
+    ui_newline();
+
+    ui_handle_hold_and_release(hover_x, hover_y, hover_width, hover_width);
+
+    if (ui.active_id == ui_current_id())
+    {
+        int32_t cx = draw_x + draw_width / 2;
+        int32_t cy = draw_y + draw_width / 2;
+        draw_line(ui.renderer,
+                  cx,
+                  cy,
+                  ui.input->mouse_x,
+                  ui.input->mouse_y,
+                  4.0f,
+                  color_rgb(0x00, 0x00, 0xff));
+    }
+    else if (ui.hovered_id == ui_current_id() && ui.dropped_id)
+    {
+        log_debug("Tried to connect %lxu to %lxu",
+                  ui.dropped_id,
+                  ui.hovered_id);
+    }
+
+    ui_pop_id();
+}
+
 void ui_begin()
 {
     ui_begin_draw_region(0, 0);
     ui.hovered_id = 0;
+    ui.dropped_id = 0;
+    if (ui.input->mouse_released & MOUSE_BUTTON_LEFT)
+    {
+        ui.dropped_id = ui.active_id;
+    }
 }
 
 void ui_end()
@@ -1390,12 +1506,54 @@ void ui_end()
     ASSERT(ui.id_stack_height == 1);
 }
 
+static void test_hash()
+{
+    const uint32_t buckets = 32;
+    uint64_t keys[buckets];
+    uint64_t values[buckets];
+
+    memset(keys, 0, sizeof(keys));
+
+    hash_t h;
+    h.bucket_count = buckets;
+    h.keys = keys;
+    h.values = values;
+
+    ASSERT(!hash_find(&h, 1, 0));
+
+    hash_insert(&h, 1, 1);
+    hash_insert(&h, 33, 32);
+    hash_insert(&h, 1234567, 1234567);
+    hash_insert(&h, 33, 33);
+    hash_insert(&h, 65, 65);
+    ASSERT(hash_find(&h, 1, 0) == 1);
+    ASSERT(hash_find(&h, 33, 0) == 33);
+    ASSERT(hash_find(&h, 1234567, 0) == 1234567);
+    ASSERT(hash_find(&h, 65, 0) == 65);
+
+    hash_remove(&h, 1);
+    ASSERT(!hash_find(&h, 1, 0));
+    ASSERT(hash_find(&h, 33, 0) == 33);
+    ASSERT(hash_find(&h, 1234567, 0) == 1234567);
+    ASSERT(hash_find(&h, 65, 0) == 65);
+
+    hash_remove(&h, 1234567);
+    ASSERT(!hash_find(&h, 1, 0));
+    ASSERT(hash_find(&h, 33, 0) == 33);
+    ASSERT(!hash_find(&h, 1234567, 0));
+    ASSERT(hash_find(&h, 65, 0) == 65);
+
+    log_flush();
+}
+
 int main(int argc, const char** argv)
 {
     ASSERT(sizeof(void*) == sizeof(uint64_t));
     (void)argc;
 
     log_init();
+
+    test_hash();
 
     void* tmp_stack_buf = platform_virtual_alloc(Gibi(1024));
     mem_stack_allocator_t* tmp_alloc =
@@ -1427,6 +1585,7 @@ int main(int argc, const char** argv)
     uint64_t t0 = platform_get_nanoseconds();
 
     ui_node_t node = {{{10, 10}, {200, 200}}};
+    ui_node_t node2 = {{{10, 10}, {200, 200}}};
 
     // main loop
     while (!input.should_exit)
@@ -1450,12 +1609,14 @@ int main(int argc, const char** argv)
         }
 
         ui_begin_node("my node", &node);
-
-        if (ui_button("Redo the thingy"))
-        {
-            log_debug("Did the thingy");
-        }
+        ui_plug("The value");
+        ui_plug("The other value");
         ui_end_node();
+
+        ui_begin_node("my other node", &node2);
+        ui_plug("amazing value");
+        ui_end_node();
+
         y = sinf(freq * t);
         ui_slider("freq", &freq, 0.0f, 10.0f);
         ui_slider("sin(freq * t)", &y, -1.0f, 1.0f);

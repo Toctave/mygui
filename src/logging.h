@@ -11,8 +11,10 @@ typedef enum log_severity_e
 void log_init();
 void log_terminate();
 
-void log_message(log_severity_e severity, const char* fmt, ...);
-void log_continue(const char* fmt, ...);
+void log_message(log_severity_e severity, const char* fmt, ...)
+    __attribute__((format(printf, 2, 3)));
+void log_continue(const char* fmt, ...) //
+    __attribute__((format(printf, 1, 2)));
 
 void log_flush();
 

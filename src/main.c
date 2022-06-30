@@ -979,13 +979,18 @@ void render(renderer_t* renderer, uint32_t width, uint32_t height)
     renderer->quad_count = 0;
 }
 
+typedef struct ui_node_t
+{
+    quad_i32_t bbox;
+} ui_node_t;
+
 struct
 {
     platform_input_info_t* input;
     renderer_t* renderer;
 
-    float cursor_x;
-    float cursor_y;
+    int32_t cursor_x;
+    int32_t cursor_y;
 
     uint64_t active_id;
     uint64_t hovered_id;
@@ -993,21 +998,29 @@ struct
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
 
+    int32_t draw_region_stack[1024][2];
+    uint32_t draw_region_stack_height;
+
     struct
     {
         color_t main;
         color_t secondary;
+        color_t background;
         color_t text;
         color_t text_shadow;
         color_t active_overlay;
         color_t hover_overlay;
     } colors;
 
+    uint32_t padding;
     uint32_t margin;
     uint32_t line_height;
+
+    ui_node_t* current_node;
+    const char* current_node_name;
 } ui;
 
-bool mouse_inside_region(float x, float y, float width, float height)
+bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
 {
     return ui.input->mouse_x >= x && ui.input->mouse_x < x + width //
            && ui.input->mouse_y >= y && ui.input->mouse_y < y + height;
@@ -1016,22 +1029,6 @@ bool mouse_inside_region(float x, float y, float width, float height)
 static uint64_t hash_combine(uint64_t base, uint64_t new)
 {
     return base * 37 + new;
-}
-
-static void ui_push_id(uint64_t id)
-{
-    ASSERT(ui.id_stack_height < ARRAY_COUNT(ui.id_stack));
-    uint64_t hashed =
-        ui.id_stack_height
-            ? hash_combine(ui.id_stack[ui.id_stack_height - 1], id)
-            : id;
-    ui.id_stack[ui.id_stack_height++] = hashed;
-}
-
-static void ui_pop_id()
-{
-    ASSERT(ui.id_stack_height);
-    ui.id_stack_height--;
 }
 
 static uint64_t hash_string(const char* txt)
@@ -1046,13 +1043,52 @@ static uint64_t hash_string(const char* txt)
     return h;
 }
 
+static void ui_push_id(uint64_t id)
+{
+    ASSERT(ui.id_stack_height < ARRAY_COUNT(ui.id_stack));
+    uint64_t hashed =
+        ui.id_stack_height
+            ? hash_combine(ui.id_stack[ui.id_stack_height - 1], id)
+            : id;
+    ui.id_stack[ui.id_stack_height++] = hashed;
+}
+
 static void ui_push_string_id(const char* txt) { ui_push_id(hash_string(txt)); }
+
+static void ui_pop_id()
+{
+    ASSERT(ui.id_stack_height);
+    ui.id_stack_height--;
+}
 
 static uint64_t ui_current_id()
 {
     ASSERT(ui.id_stack_height);
 
     return ui.id_stack[ui.id_stack_height - 1];
+}
+
+static void ui_begin_draw_region(int32_t x, int32_t y)
+{
+    ASSERT(ui.draw_region_stack_height < ARRAY_COUNT(ui.draw_region_stack));
+
+    ui.draw_region_stack[ui.draw_region_stack_height][0] = ui.cursor_x;
+    ui.draw_region_stack[ui.draw_region_stack_height][1] = ui.cursor_y;
+    ui.draw_region_stack_height++;
+
+    ui.cursor_x = x + ui.margin;
+    ui.cursor_y = y + ui.margin;
+}
+
+static void ui_end_draw_region()
+{
+    ASSERT(ui.draw_region_stack_height);
+    ui.draw_region_stack_height--;
+
+    int32_t(*cursor)[2] = &ui.draw_region_stack[ui.draw_region_stack_height];
+
+    ui.cursor_x = (*cursor)[0];
+    ui.cursor_y = (*cursor)[1];
 }
 
 static void draw_shadowed_text(renderer_t* renderer,
@@ -1082,13 +1118,77 @@ float clamped_float(float t, float min, float max)
     }
 }
 
-bool ui_current_is_hovered() { return ui.hovered_id == ui_current_id(); }
+bool ui_handle_hover(int32_t x, int32_t y, uint32_t w, uint32_t h)
+{
+    bool is_inside = mouse_inside_region(x, y, w, h);
 
-void ui_make_current_hovered() { ui.hovered_id = ui_current_id(); }
+    if (!ui.hovered_id && is_inside)
+    {
+        ui.hovered_id = ui_current_id();
+        return true;
+    }
+    else if (ui.hovered_id == ui_current_id() && !is_inside)
+    {
+        ui.hovered_id = 0;
+        return false;
+    }
 
-bool ui_current_is_active() { return ui.active_id == ui_current_id(); }
+    return ui.hovered_id == ui_current_id();
+}
 
-void ui_make_current_active() { ui.active_id = ui_current_id(); }
+bool ui_handle_hold_and_release(int32_t x, int32_t y, uint32_t w, uint32_t h)
+{
+    bool hovered = ui_handle_hover(x, y, w, h);
+
+    if (hovered && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT)
+        && !ui.active_id)
+    {
+        ui.active_id = ui_current_id();
+        return false;
+    }
+    else if (ui.active_id == ui_current_id()
+             && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
+    {
+        ui.active_id = 0;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool ui_handle_drag(int32_t x,
+                    int32_t y,
+                    uint32_t w,
+                    uint32_t h,
+                    int32_t* dx,
+                    int32_t* dy)
+{
+    ui_handle_hold_and_release(x, y, w, h);
+
+    if (ui.active_id == ui_current_id())
+    {
+        *dx = ui.input->mouse_dx;
+        *dy = ui.input->mouse_dy;
+
+        return *dx || *dy;
+    }
+
+    return false;
+}
+
+bool ui_handle_drag_x(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dx)
+{
+    int32_t dy;
+    return ui_handle_drag(x, y, w, h, dx, &dy) && *dx;
+}
+
+bool ui_handle_drag_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
+{
+    int32_t dx;
+    return ui_handle_drag(x, y, w, h, &dx, dy) && *dy;
+}
 
 float lerp(float t, float min, float max) { return min + t * (max - min); }
 
@@ -1096,7 +1196,37 @@ float unlerp(float t, float min, float max) { return (t - min) / (max - min); }
 
 void ui_newline() { ui.cursor_y += ui.line_height + ui.margin; }
 
-bool slider(const char* txt, float* value, float min, float max)
+void ui_draw_hover_and_active_overlay(int32_t x,
+                                      int32_t y,
+                                      uint32_t width,
+                                      uint32_t height)
+{
+    if (ui.active_id == ui_current_id())
+    {
+        draw_colored_quad(ui.renderer,
+                          (quad_i32_t){{x, y}, {width, height}},
+                          ui.colors.active_overlay);
+    }
+    else if (ui.hovered_id == ui_current_id())
+    {
+        draw_colored_quad(ui.renderer,
+                          (quad_i32_t){{x, y}, {width, height}},
+                          ui.colors.hover_overlay);
+    }
+}
+
+void ui_draw_text(const char* txt, int32_t x, int32_t y)
+{
+    draw_shadowed_text(ui.renderer,
+                       txt,
+                       x + ui.padding,
+                       y + ui.padding
+                           - 3, // TODO(octave) : why 3 ? font ascent ?
+                       ui.colors.text,
+                       ui.colors.text_shadow);
+}
+
+bool ui_slider(const char* txt, float* value, float min, float max)
 {
     ui_push_string_id(txt);
 
@@ -1111,26 +1241,10 @@ bool slider(const char* txt, float* value, float min, float max)
 
     bool changed = false;
 
-    if (mouse_inside_region(box_x, box_y, box_width, box_height))
+    int32_t dx;
+    if (ui_handle_drag_x(box_x, box_y, box_width, box_height, &dx))
     {
-        ui_make_current_hovered();
-    }
-
-    if (ui_current_is_hovered()
-        && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT))
-    {
-        ui.active_id = ui_current_id();
-    }
-
-    if (ui_current_is_active()
-        && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
-    {
-        ui.active_id = 0;
-    }
-
-    if (ui_current_is_active() && ui.input->mouse_dx != 0)
-    {
-        *value += (float)ui.input->mouse_dx / unitsToPixels;
+        *value += (float)dx / unitsToPixels;
         *value = clamped_float(*value, min, max);
     }
 
@@ -1151,26 +1265,9 @@ bool slider(const char* txt, float* value, float min, float max)
     char value_txt[256];
     snprintf(value_txt, sizeof(value_txt), "%.3f", *value);
 
-    draw_shadowed_text(ui.renderer,
-                       value_txt,
-                       box_x + 4,
-                       box_y + 1,
-                       ui.colors.text,
-                       ui.colors.text_shadow);
+    ui_draw_text(value_txt, box_x, box_y);
 
-    if (ui_current_is_active())
-    {
-        draw_colored_quad(ui.renderer,
-                          (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
-                          ui.colors.active_overlay);
-    }
-    else if (ui_current_is_hovered())
-    {
-        draw_colored_quad(ui.renderer,
-
-                          (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
-                          ui.colors.hover_overlay);
-    }
+    ui_draw_hover_and_active_overlay(box_x, box_y, box_width, box_height);
 
     ui_pop_id();
 
@@ -1179,56 +1276,23 @@ bool slider(const char* txt, float* value, float min, float max)
     return changed;
 }
 
-bool button(const char* txt)
+bool ui_button(const char* txt)
 {
     ui_push_string_id(txt);
 
-    float width = ui.renderer->font.bbox.extent[0] * strlen(txt) + 8;
-    float height = ui.renderer->font.bbox.extent[1] + 8;
-    float x = ui.cursor_x;
-    float y = ui.cursor_y;
+    int32_t width = ui.renderer->font.bbox.extent[0] * strlen(txt) + 8;
+    int32_t height = ui.line_height;
+    int32_t x = ui.cursor_x;
+    int32_t y = ui.cursor_y;
 
-    if (mouse_inside_region(x, y, width, height))
-    {
-        ui.hovered_id = ui_current_id();
-    }
-    else
-    {
-        ui.hovered_id = 0;
-    }
-
-    if (ui.hovered_id == ui_current_id()
-        && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT))
-    {
-        ui.active_id = ui_current_id();
-    }
-
-    bool result = false;
-    if (ui.active_id == ui_current_id()
-        && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
-    {
-        ui.active_id = 0;
-        result = true;
-    }
+    bool result = ui_handle_hold_and_release(x, y, width, height);
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
     draw_colored_quad(ui.renderer, pos_quad, ui.colors.main);
 
-    if (ui.active_id == ui_current_id())
-    {
-        draw_colored_quad(ui.renderer, pos_quad, ui.colors.active_overlay);
-    }
-    else if (ui.hovered_id == ui_current_id())
-    {
-        draw_colored_quad(ui.renderer, pos_quad, ui.colors.hover_overlay);
-    }
+    ui_draw_text(txt, x, y);
 
-    draw_shadowed_text(ui.renderer,
-                       txt,
-                       x + 4,
-                       y + 1,
-                       ui.colors.text,
-                       ui.colors.text_shadow);
+    ui_draw_hover_and_active_overlay(x, y, width, height);
 
     ui_pop_id();
 
@@ -1237,13 +1301,14 @@ bool button(const char* txt)
     return result;
 }
 
-static void ui_init(renderer_t* renderer, platform_input_info_t* input)
+void ui_init(renderer_t* renderer, platform_input_info_t* input)
 {
     ui.renderer = renderer;
     ui.input = input;
 
     ui.colors.main = color_gray(0x60);
     ui.colors.secondary = color_gray(0x30);
+    ui.colors.background = color_gray(0xB0);
 
     ui.colors.text = color_gray(0xFF);
     ui.colors.text_shadow = color_gray(0x40);
@@ -1251,8 +1316,75 @@ static void ui_init(renderer_t* renderer, platform_input_info_t* input)
     ui.colors.hover_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
     ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
 
-    ui.line_height = ui.renderer->font.bbox.extent[1] + 8;
+    ui.padding = 4;
+    ui.line_height = ui.renderer->font.bbox.extent[1] + 2 * ui.padding;
     ui.margin = 2;
+
+    ui_push_id(1);
+}
+
+void ui_begin_node(const char* name, ui_node_t* node)
+{
+    ASSERT(!ui.current_node);
+    ASSERT(!ui.current_node_name);
+
+    ui.current_node = node;
+    ui.current_node_name = name;
+
+    ui_push_string_id(name);
+
+    int32_t x = node->bbox.min[0];
+    int32_t y = node->bbox.min[1];
+    uint32_t width = node->bbox.extent[0];
+    /* uint32_t height = node->bbox.extent[1]; */
+
+    draw_colored_quad(ui.renderer, node->bbox, ui.colors.background);
+    draw_colored_quad(ui.renderer,
+                      (quad_i32_t){{x, y}, {width, ui.line_height}},
+                      ui.colors.main);
+
+    ui_draw_text(ui.current_node_name, x, y);
+
+    ui_begin_draw_region(x, y + ui.line_height);
+}
+
+void ui_end_node()
+{
+    ASSERT(ui.current_node);
+
+    ui_node_t* node = ui.current_node;
+
+    int32_t x = node->bbox.min[0];
+    int32_t y = node->bbox.min[1];
+    uint32_t width = node->bbox.extent[0];
+    uint32_t height = node->bbox.extent[1];
+
+    int32_t dx, dy;
+    if (ui_handle_drag(x, y, width, height, &dx, &dy))
+    {
+        node->bbox.min[0] += dx;
+        node->bbox.min[1] += dy;
+    }
+
+    ui_end_draw_region();
+
+    ui_pop_id();
+    ui.current_node = 0;
+    ui.current_node_name = 0;
+}
+
+void ui_begin()
+{
+    ui_begin_draw_region(0, 0);
+    ui.hovered_id = 0;
+}
+
+void ui_end()
+{
+    ui_end_draw_region();
+    ASSERT(ui.draw_region_stack_height == 0);
+
+    ASSERT(ui.id_stack_height == 1);
 }
 
 int main(int argc, const char** argv)
@@ -1270,7 +1402,9 @@ int main(int argc, const char** argv)
     mem_stack_allocator_t* permanent_alloc =
         mem_stack_create(permanent_stack_buf, Gibi(1024));
 
-    if (!platform_init(argv[0], 640, 480))
+    uint32_t window_width = 640;
+    uint32_t window_height = 480;
+    if (!platform_init(argv[0], window_width, window_height))
     {
         return 1;
     }
@@ -1289,9 +1423,12 @@ int main(int argc, const char** argv)
 
     uint64_t t0 = platform_get_nanoseconds();
 
+    ui_node_t node = {{{10, 10}, {200, 200}}};
+
     // main loop
     while (!input.should_exit)
     {
+        /* log_debug("active = %lu, hovered = %lu", ui.active_id, ui.hovered_id); */
         uint64_t now = platform_get_nanoseconds();
 
         float t = (now - t0) * 1e-9f;
@@ -1299,24 +1436,33 @@ int main(int argc, const char** argv)
 
         platform_handle_input_events(&input);
 
-        ui.cursor_x = ui.margin;
-        ui.cursor_y = ui.margin;
+        ui_begin();
 
-        if (button("Do the thingy"))
+        if (ui_button("Do the thingy"))
+        {
+            log_debug("Did the thingy");
+        }
+        if (ui_button("Undo the thingy"))
         {
         }
-        if (button("Undo the thingy"))
-        {
-        }
 
+        ui_begin_node("my node", &node);
+
+        if (ui_button("Redo the thingy"))
+        {
+            log_debug("Did the thingy");
+        }
+        ui_end_node();
         y = sinf(freq * t);
-        slider("freq", &freq, 0.0f, 10.0f);
-        slider("sin(freq * t)", &y, -1.0f, 1.0f);
+        ui_slider("freq", &freq, 0.0f, 10.0f);
+        ui_slider("sin(freq * t)", &y, -1.0f, 1.0f);
 
-        log_flush();
+        ui_end();
 
         render(&renderer, input.width, input.height);
         platform_swap_buffers();
+
+        log_flush();
     }
 
     log_terminate();

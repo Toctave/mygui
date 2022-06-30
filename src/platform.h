@@ -44,3 +44,5 @@ void platform_close_file(platform_file_t* file);
 
 uint64_t platform_get_file_size(platform_file_t* file);
 uint64_t platform_read_file(platform_file_t* file, void* buffer, uint64_t size);
+
+uint64_t platform_get_nanoseconds();

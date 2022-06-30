@@ -1,6 +1,7 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -1099,20 +1100,16 @@ bool slider(const char* txt, float* value, float min, float max)
 {
     ui_push_string_id(txt);
 
-    float value_01 = unlerp(*value, min, max);
-
-    bool changed = false;
-
     uint32_t box_width = 200;
     uint32_t box_height = ui.line_height;
     int32_t box_x = ui.cursor_x;
     int32_t box_y = ui.cursor_y;
 
-    uint32_t margin = 0;
-    int32_t knob_height = box_height - 2 * margin;
-    int32_t knob_range = (box_width - 2 * margin);
-    int32_t knob_width = lerp(value_01, 0, knob_range);
-    int32_t knob_y = box_y + margin;
+    float range = max - min;
+    bool finiteRange = range < INFINITY;
+    float unitsToPixels = finiteRange ? box_width / range : 100.0f;
+
+    bool changed = false;
 
     if (mouse_inside_region(box_x, box_y, box_width, box_height))
     {
@@ -1131,22 +1128,25 @@ bool slider(const char* txt, float* value, float min, float max)
         ui.active_id = 0;
     }
 
-    if (ui_current_is_active())
+    if (ui_current_is_active() && ui.input->mouse_dx != 0)
     {
-        value_01 += (float)ui.input->mouse_dx / knob_range;
-        value_01 = clamped_float(value_01, 0.0f, 1.0f);
-
-        *value = lerp(value_01, min, max);
-        changed = (ui.input->mouse_dx != 0);
+        *value += (float)ui.input->mouse_dx / unitsToPixels;
+        *value = clamped_float(*value, min, max);
     }
 
     draw_colored_quad(ui.renderer,
                       (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
                       ui.colors.secondary);
-    draw_colored_quad(
-        ui.renderer,
-        (quad_i32_t){{box_x + margin, knob_y}, {knob_width, knob_height}},
-        ui.colors.main);
+    if (finiteRange)
+    {
+        int32_t slider_position =
+            unitsToPixels * (clamped_float(*value, min, max) - min);
+
+        draw_colored_quad(
+            ui.renderer,
+            (quad_i32_t){{box_x, box_y}, {slider_position, box_height}},
+            ui.colors.main);
+    }
 
     char value_txt[256];
     snprintf(value_txt, sizeof(value_txt), "%.3f", *value);
@@ -1252,7 +1252,7 @@ static void ui_init(renderer_t* renderer, platform_input_info_t* input)
     ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
 
     ui.line_height = ui.renderer->font.bbox.extent[1] + 8;
-    ui.margin = 4;
+    ui.margin = 2;
 }
 
 int main(int argc, const char** argv)
@@ -1285,39 +1285,33 @@ int main(int argc, const char** argv)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    uint32_t glyph_index = 70;
+    float freq;
 
-    float x, y;
+    uint64_t t0 = platform_get_nanoseconds();
 
     // main loop
     while (!input.should_exit)
     {
+        uint64_t now = platform_get_nanoseconds();
+
+        float t = (now - t0) * 1e-9f;
+        float y = sinf(t);
+
         platform_handle_input_events(&input);
 
         ui.cursor_x = ui.margin;
         ui.cursor_y = ui.margin;
 
-        ui_push_id(64);
-        button("1");
-        ui_pop_id();
-
-        if (button("1"))
+        if (button("Do the thingy"))
         {
-            glyph_index++;
         }
         if (button("Undo the thingy"))
         {
         }
 
-        if (slider("val", &x, 0.0f, 10.0f))
-        {
-            log_debug("x = %f", x);
-        }
-
-        if (slider("val2", &y, 0.0f, 10.0f))
-        {
-            log_debug("y = %f", y);
-        }
+        y = sinf(freq * t);
+        slider("freq", &freq, 0.0f, 10.0f);
+        slider("sin(freq * t)", &y, -1.0f, 1.0f);
 
         log_flush();
 

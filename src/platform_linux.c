@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <time.h>
+
 // source : https://forum.juce.com/t/detecting-if-a-process-is-being-run-under-a-debugger/2098
 // This works on both linux and MacOSX (and any BSD kernel).
 bool platform_running_under_debugger()
@@ -113,4 +115,12 @@ uint64_t platform_read_file(platform_file_t* file, void* buffer, uint64_t size)
     }
 
     return bytes_read;
+}
+
+uint64_t platform_get_nanoseconds()
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+
+    return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }

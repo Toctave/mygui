@@ -3,7 +3,7 @@ compiler=gcc
 mkdir -p build
 
 common_flags="-g"
-sources="src/main.c src/logging.c src/memory.c src/platform_glx.c src/platform_linux.c src/hash.c"
+sources="src/main.c src/logging.c src/memory.c src/platform_glx.c src/platform_linux.c src/hash.c src/data_model.c"
 libs="-lGLX -lX11 -lGL -lm"
 warnings="-Wall -Wextra -Wpedantic"
 

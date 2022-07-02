@@ -60,12 +60,15 @@ void mem_stack_destroy(mem_stack_allocator_t* stack)
     stack->used = 0;
 }
 
-uint64_t mem_stack_top(mem_stack_allocator_t* alloc) { return alloc->used; }
-
-void mem_stack_reset(mem_stack_allocator_t* alloc, uint64_t top)
+uint64_t mem_stack_get_cursor(mem_stack_allocator_t* alloc)
 {
-    ASSERT(top <= alloc->used);
-    alloc->used = top;
+    return alloc->used;
+}
+
+void mem_stack_revert(mem_stack_allocator_t* alloc, uint64_t cursor)
+{
+    ASSERT(cursor <= alloc->used);
+    alloc->used = cursor;
 }
 
 void* mem_stack_push(mem_stack_allocator_t* alloc, uint64_t size)

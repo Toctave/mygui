@@ -38,6 +38,7 @@ static uint32_t hash_find_free_bucket(const hash_t* hash, uint64_t key)
     return bucket_index;
 }
 
+// TODO(octave) : better hash functions. MurmurHash ? MeowHash ?
 uint64_t hash_combine(uint64_t base, uint64_t new) { return base * 37 + new; }
 
 uint64_t hash_string(const char* txt)

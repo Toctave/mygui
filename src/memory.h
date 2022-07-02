@@ -27,7 +27,7 @@ void mem_free(mem_allocator_api* alloc, void* ptr);
 mem_stack_allocator_t* mem_stack_create(void* buffer, uint64_t size);
 void mem_stack_destroy(mem_stack_allocator_t* alloc);
 
-uint64_t mem_stack_top(mem_stack_allocator_t* alloc);
-void mem_stack_reset(mem_stack_allocator_t* alloc, uint64_t top);
+uint64_t mem_stack_get_cursor(mem_stack_allocator_t* alloc);
+void mem_stack_revert(mem_stack_allocator_t* alloc, uint64_t cursor);
 
 void* mem_stack_push(mem_stack_allocator_t* alloc, uint64_t size);

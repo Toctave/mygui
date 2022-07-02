@@ -2,6 +2,7 @@
 #include <GL/glext.h>
 #include <inttypes.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -160,12 +161,12 @@ void* read_alloc_file(mem_stack_allocator_t* alloc, const char* path)
     }
     uint64_t size = platform_get_file_size(f);
 
-    uint64_t top = mem_stack_top(alloc);
+    uint64_t prev = mem_stack_get_cursor(alloc);
     void* buf = mem_stack_push(alloc, size);
 
     if (platform_read_file(f, buf, size) != size)
     {
-        mem_stack_reset(alloc, top);
+        mem_stack_revert(alloc, prev);
         buf = 0;
     }
 
@@ -183,12 +184,12 @@ char* read_alloc_text_file(mem_stack_allocator_t* alloc, const char* path)
     }
     uint64_t size = platform_get_file_size(f);
 
-    uint64_t top = mem_stack_top(alloc);
+    uint64_t prev = mem_stack_get_cursor(alloc);
     char* buf = mem_stack_push(alloc, size + 1);
 
     if (platform_read_file(f, buf, size) != size)
     {
-        mem_stack_reset(alloc, top);
+        mem_stack_revert(alloc, prev);
         buf = 0;
     }
     else
@@ -245,10 +246,14 @@ GLuint compile_shader_stage(mem_stack_allocator_t* tmp,
         {
             if (line[line_length] == '\n')
             {
-                log_continue("%s:%*s", path, line_length, line);
-                line += line_length;
+                log_continue("%s:%.*s\n", path, line_length, line);
+                line += line_length + 1;
+                line_length = 0;
             }
-            line_length++;
+            else
+            {
+                line_length++;
+            }
         }
 
         glDeleteShader(stage);
@@ -1050,6 +1055,7 @@ typedef struct ui_node_t
 
 struct
 {
+    mem_stack_allocator_t* tmp_stack;
     platform_input_info_t* input;
     renderer_t* renderer;
 
@@ -1274,6 +1280,32 @@ void ui_draw_text(const char* txt, int32_t x, int32_t y)
                        ui.colors.text_shadow);
 }
 
+char* vtprintf(mem_stack_allocator_t* stack, const char* fmt, va_list args)
+{
+    va_list args_copy;
+    va_copy(args_copy, args);
+
+    int needed = vsnprintf(0, 0, fmt, args) + 1;
+
+    char* result = mem_stack_push(stack, needed);
+
+    vsnprintf(result, needed, fmt, args_copy);
+
+    return result;
+}
+
+char* tprintf(mem_stack_allocator_t* stack, const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    char* result = vtprintf(stack, fmt, args);
+
+    va_end(args);
+
+    return result;
+}
+
 bool ui_slider(const char* txt, float* value, float min, float max)
 {
     ui_push_string_id(txt);
@@ -1310,8 +1342,7 @@ bool ui_slider(const char* txt, float* value, float min, float max)
             ui.colors.main);
     }
 
-    char value_txt[256];
-    snprintf(value_txt, sizeof(value_txt), "%.3f", *value);
+    char* value_txt = tprintf(ui.tmp_stack, "%.3f", *value);
 
     ui_draw_text(value_txt, box_x, box_y);
 
@@ -1350,8 +1381,11 @@ bool ui_button(const char* txt)
     return result;
 }
 
-void ui_init(renderer_t* renderer, platform_input_info_t* input)
+void ui_init(mem_stack_allocator_t* tmp_stack,
+             renderer_t* renderer,
+             platform_input_info_t* input)
 {
+    ui.tmp_stack = tmp_stack;
     ui.renderer = renderer;
     ui.input = input;
 
@@ -1548,7 +1582,6 @@ static void test_hash()
 
 int main(int argc, const char** argv)
 {
-    ASSERT(sizeof(void*) == sizeof(uint64_t));
     (void)argc;
 
     log_init();
@@ -1559,6 +1592,11 @@ int main(int argc, const char** argv)
     mem_stack_allocator_t* tmp_alloc =
         mem_stack_create(tmp_stack_buf, Gibi(1024));
 
+    char* p = tprintf(tmp_alloc, "coucou");
+
+    printf("%s\n", p);
+
+    ASSERT(sizeof(void*) == sizeof(uint64_t));
     void* permanent_stack_buf = platform_virtual_alloc(Gibi(1024));
     mem_stack_allocator_t* permanent_alloc =
         mem_stack_create(permanent_stack_buf, Gibi(1024));
@@ -1575,7 +1613,7 @@ int main(int argc, const char** argv)
 
     platform_input_info_t input = {0};
 
-    ui_init(&renderer, &input);
+    ui_init(tmp_alloc, &renderer, &input);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1590,6 +1628,7 @@ int main(int argc, const char** argv)
     // main loop
     while (!input.should_exit)
     {
+        mem_stack_revert(tmp_alloc, 0);
         /* log_debug("active = %lu, hovered = %lu", ui.active_id, ui.hovered_id); */
         uint64_t now = platform_get_nanoseconds();
 
@@ -1620,6 +1659,9 @@ int main(int argc, const char** argv)
         y = sinf(freq * t);
         ui_slider("freq", &freq, 0.0f, 10.0f);
         ui_slider("sin(freq * t)", &y, -1.0f, 1.0f);
+
+        char* txt = tprintf(tmp_alloc, "Used : %zu", tmp_alloc->used);
+        ui_draw_text(txt, 0, 300);
 
         ui_end();
 

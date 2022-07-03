@@ -14,6 +14,7 @@
 #include "memory.h"
 #include "opengl_functions.h"
 #include "platform.h"
+#include "plugin_manager.h"
 #include "util.h"
 
 typedef struct quad_i32_t
@@ -88,6 +89,8 @@ typedef struct renderer_t
     uint32_t quad_count;
 } renderer_t;
 
+static mem_api* mem;
+
 color_t color_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
     color_t result;
@@ -152,7 +155,7 @@ void texture_set_data(texture_t* texture, uint8_t* data)
                     data);
 }
 
-void* read_alloc_file(mem_stack_allocator_t* alloc, const char* path)
+void* read_alloc_file(mem_stack_allocator_o* alloc, const char* path)
 {
     platform_file_t* f = platform_open_file(path);
     if (!f)
@@ -161,12 +164,12 @@ void* read_alloc_file(mem_stack_allocator_t* alloc, const char* path)
     }
     uint64_t size = platform_get_file_size(f);
 
-    uint64_t prev = mem_stack_get_cursor(alloc);
-    void* buf = mem_stack_push(alloc, size);
+    uint64_t prev = mem->stack_get_cursor(alloc);
+    void* buf = mem->stack_push(alloc, size);
 
     if (platform_read_file(f, buf, size) != size)
     {
-        mem_stack_revert(alloc, prev);
+        mem->stack_revert(alloc, prev);
         buf = 0;
     }
 
@@ -175,7 +178,7 @@ void* read_alloc_file(mem_stack_allocator_t* alloc, const char* path)
     return buf;
 }
 
-char* read_alloc_text_file(mem_stack_allocator_t* alloc, const char* path)
+char* read_alloc_text_file(mem_stack_allocator_o* alloc, const char* path)
 {
     platform_file_t* f = platform_open_file(path);
     if (!f)
@@ -184,12 +187,12 @@ char* read_alloc_text_file(mem_stack_allocator_t* alloc, const char* path)
     }
     uint64_t size = platform_get_file_size(f);
 
-    uint64_t prev = mem_stack_get_cursor(alloc);
-    char* buf = mem_stack_push(alloc, size + 1);
+    uint64_t prev = mem->stack_get_cursor(alloc);
+    char* buf = mem->stack_push(alloc, size + 1);
 
     if (platform_read_file(f, buf, size) != size)
     {
-        mem_stack_revert(alloc, prev);
+        mem->stack_revert(alloc, prev);
         buf = 0;
     }
     else
@@ -202,7 +205,7 @@ char* read_alloc_text_file(mem_stack_allocator_t* alloc, const char* path)
     return buf;
 }
 
-GLuint compile_shader_stage(mem_stack_allocator_t* tmp,
+GLuint compile_shader_stage(mem_stack_allocator_o* tmp,
                             const char* path,
                             shader_stage_e stage_type)
 {
@@ -220,7 +223,8 @@ GLuint compile_shader_stage(mem_stack_allocator_t* tmp,
     }
     GLuint stage = glCreateShader(gl_stage_type);
 
-    const char* source = read_alloc_text_file(tmp, path);
+    const char* abs_path = tprintf(mem, tmp, "%s/%s", EXECUTABLE_PATH, path);
+    const char* source = read_alloc_text_file(tmp, abs_path);
     ASSERT(source);
 
     const char* sources[] = {source};
@@ -236,7 +240,7 @@ GLuint compile_shader_stage(mem_stack_allocator_t* tmp,
         GLsizei info_log_length;
         glGetShaderiv(stage, GL_INFO_LOG_LENGTH, &info_log_length);
 
-        char* info_log = mem_stack_push(tmp, info_log_length);
+        char* info_log = mem->stack_push(tmp, info_log_length);
         glGetShaderInfoLog(stage, info_log_length, 0, info_log);
 
         log_error("Shader compilation error :\n");
@@ -263,7 +267,7 @@ GLuint compile_shader_stage(mem_stack_allocator_t* tmp,
     return stage;
 }
 
-GLuint compile_shader(mem_stack_allocator_t* tmp,
+GLuint compile_shader(mem_stack_allocator_o* tmp,
                       const char* vertex_path,
                       const char* fragment_path)
 {
@@ -295,7 +299,7 @@ GLuint compile_shader(mem_stack_allocator_t* tmp,
         GLsizei info_log_length;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_log_length);
 
-        char* info_log = mem_stack_push(tmp, info_log_length);
+        char* info_log = mem->stack_push(tmp, info_log_length);
         glGetProgramInfoLog(program, info_log_length, 0, info_log);
 
         log_error("Shader linking error :\n%s", info_log);
@@ -490,8 +494,8 @@ static bool read_quad_i32(const char** cursor, quad_i32_t* q)
     }
 }
 
-bool load_bdf(mem_stack_allocator_t* tmp,
-              mem_stack_allocator_t* permanent,
+bool load_bdf(mem_stack_allocator_o* tmp,
+              mem_stack_allocator_o* permanent,
               font_t* font,
               const char* bdf_path)
 {
@@ -610,14 +614,14 @@ bool load_bdf(mem_stack_allocator_t* tmp,
             {
                 font->glyph_count = character_count;
                 font->glyphs =
-                    mem_stack_push(permanent,
-                                   sizeof(font_glyph_t) * font->glyph_count);
+                    mem->stack_push(permanent,
+                                    sizeof(font_glyph_t) * font->glyph_count);
 
                 font->stride = (font->bbox.extent[0] + 7) / 8;
                 glyph_bitmap_size = font->stride * font->bbox.extent[1];
                 font->bitmap =
-                    mem_stack_push(permanent,
-                                   font->glyph_count * glyph_bitmap_size);
+                    mem->stack_push(permanent,
+                                    font->glyph_count * glyph_bitmap_size);
                 current_glyph = font->glyphs;
                 current_glyph_bitmap = font->bitmap;
             }
@@ -750,7 +754,7 @@ void print_glyph(font_t* font, uint32_t index)
     }
 }
 
-void texture_create_from_font(mem_stack_allocator_t* tmp,
+void texture_create_from_font(mem_stack_allocator_o* tmp,
                               texture_t* texture,
                               const font_t* font)
 {
@@ -760,7 +764,7 @@ void texture_create_from_font(mem_stack_allocator_t* tmp,
         1 + font->bbox.extent[1] * font->glyph_count); // keep one line of white
 
     uint32_t texture_stride = 4 * texture->width;
-    uint8_t* pixels = mem_stack_push(tmp, texture_stride * texture->height);
+    uint8_t* pixels = mem->stack_push(tmp, texture_stride * texture->height);
 
     // Fill white line
     for (uint32_t x = 0; x < 4 * texture->width; x++)
@@ -801,8 +805,8 @@ void texture_create_from_font(mem_stack_allocator_t* tmp,
     texture_set_data(texture, pixels);
 }
 
-void renderer_init(mem_stack_allocator_t* tmp,
-                   mem_stack_allocator_t* permanent,
+void renderer_init(mem_stack_allocator_o* tmp,
+                   mem_stack_allocator_o* permanent,
                    renderer_t* renderer)
 {
     glGenBuffers(1, &renderer->vbo);
@@ -848,8 +852,8 @@ void renderer_init(mem_stack_allocator_t* tmp,
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    renderer->vertex_data = mem_stack_push(permanent, Gibi(1));
-    renderer->index_data = mem_stack_push(permanent, Gibi(1));
+    renderer->vertex_data = mem->stack_push(permanent, Gibi(1));
+    renderer->index_data = mem->stack_push(permanent, Gibi(1));
 
     // Font texture
     load_bdf(tmp, tmp, &renderer->font, "assets/haxor11.bdf");
@@ -1055,7 +1059,7 @@ typedef struct ui_node_t
 
 struct
 {
-    mem_stack_allocator_t* tmp_stack;
+    mem_stack_allocator_o* tmp_stack;
     platform_input_info_t* input;
     renderer_t* renderer;
 
@@ -1280,32 +1284,6 @@ void ui_draw_text(const char* txt, int32_t x, int32_t y)
                        ui.colors.text_shadow);
 }
 
-char* vtprintf(mem_stack_allocator_t* stack, const char* fmt, va_list args)
-{
-    va_list args_copy;
-    va_copy(args_copy, args);
-
-    int needed = vsnprintf(0, 0, fmt, args) + 1;
-
-    char* result = mem_stack_push(stack, needed);
-
-    vsnprintf(result, needed, fmt, args_copy);
-
-    return result;
-}
-
-char* tprintf(mem_stack_allocator_t* stack, const char* fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-
-    char* result = vtprintf(stack, fmt, args);
-
-    va_end(args);
-
-    return result;
-}
-
 bool ui_slider(const char* txt, float* value, float min, float max)
 {
     ui_push_string_id(txt);
@@ -1342,7 +1320,7 @@ bool ui_slider(const char* txt, float* value, float min, float max)
             ui.colors.main);
     }
 
-    char* value_txt = tprintf(ui.tmp_stack, "%.3f", *value);
+    char* value_txt = tprintf(mem, ui.tmp_stack, "%.3f", *value);
 
     ui_draw_text(value_txt, box_x, box_y);
 
@@ -1381,7 +1359,7 @@ bool ui_button(const char* txt)
     return result;
 }
 
-void ui_init(mem_stack_allocator_t* tmp_stack,
+void ui_init(mem_stack_allocator_o* tmp_stack,
              renderer_t* renderer,
              platform_input_info_t* input)
 {
@@ -1584,29 +1562,28 @@ int main(int argc, const char** argv)
 {
     (void)argc;
 
-    log_init();
-
-    test_hash();
-
-    void* tmp_stack_buf = platform_virtual_alloc(Gibi(1024));
-    mem_stack_allocator_t* tmp_alloc =
-        mem_stack_create(tmp_stack_buf, Gibi(1024));
-
-    char* p = tprintf(tmp_alloc, "coucou");
-
-    printf("%s\n", p);
-
-    ASSERT(sizeof(void*) == sizeof(uint64_t));
-    void* permanent_stack_buf = platform_virtual_alloc(Gibi(1024));
-    mem_stack_allocator_t* permanent_alloc =
-        mem_stack_create(permanent_stack_buf, Gibi(1024));
-
     uint32_t window_width = 640;
     uint32_t window_height = 480;
-    if (!platform_init(argv[0], window_width, window_height))
+    if (!platform_init(argv[0], argv[0], window_width, window_height))
     {
         return 1;
     }
+
+    plugin_manager_init();
+    mem = load_plugin("memory", (version_t){1, 0, 0});
+    ASSERT(mem);
+
+    log_init(mem->vm);
+    test_hash();
+
+    void* tmp_stack_buf = mem_alloc(mem->vm, Gibi(1024));
+    mem_stack_allocator_o* tmp_alloc =
+        mem->stack_create(tmp_stack_buf, Gibi(1024));
+
+    ASSERT(sizeof(void*) == sizeof(uint64_t));
+    void* permanent_stack_buf = mem_alloc(mem->vm, Gibi(1024));
+    mem_stack_allocator_o* permanent_alloc =
+        mem->stack_create(permanent_stack_buf, Gibi(1024));
 
     renderer_t renderer = {0};
     renderer_init(tmp_alloc, permanent_alloc, &renderer);
@@ -1618,7 +1595,7 @@ int main(int argc, const char** argv)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    float freq;
+    float freq = 1.0f;
 
     uint64_t t0 = platform_get_nanoseconds();
 
@@ -1628,7 +1605,7 @@ int main(int argc, const char** argv)
     // main loop
     while (!input.should_exit)
     {
-        mem_stack_revert(tmp_alloc, 0);
+        mem->stack_revert(tmp_alloc, 0);
         /* log_debug("active = %lu, hovered = %lu", ui.active_id, ui.hovered_id); */
         uint64_t now = platform_get_nanoseconds();
 
@@ -1660,8 +1637,8 @@ int main(int argc, const char** argv)
         ui_slider("freq", &freq, 0.0f, 10.0f);
         ui_slider("sin(freq * t)", &y, -1.0f, 1.0f);
 
-        char* txt = tprintf(tmp_alloc, "Used : %zu", tmp_alloc->used);
-        ui_draw_text(txt, 0, 300);
+        /* char* txt = tprintf(mem, tmp_alloc, "Used : %zu", tmp_alloc->used); */
+        /* ui_draw_text(txt, 0, 300); */
 
         ui_end();
 

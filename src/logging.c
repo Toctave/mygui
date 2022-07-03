@@ -26,11 +26,11 @@ static uint64_t message_count;
 
 #define BUFFER_SIZE Gibi(1)
 
-void log_init()
+void log_init(mem_allocator_i* alloc)
 {
-    buffer = platform_virtual_alloc(BUFFER_SIZE);
-    messages = platform_virtual_alloc(BUFFER_SIZE);
-    line_indices = platform_virtual_alloc(BUFFER_SIZE);
+    buffer = mem_alloc(alloc, BUFFER_SIZE);
+    messages = mem_alloc(alloc, BUFFER_SIZE);
+    line_indices = mem_alloc(alloc, BUFFER_SIZE);
 
     cursor = buffer;
 

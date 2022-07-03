@@ -69,8 +69,19 @@ static bool isGLXExtensionPresent(int screen, const char* extensionName)
     return false;
 }
 
-bool platform_init(const char* window_title, uint32_t width, uint32_t height)
+bool platform_init(const char* argv0,
+                   const char* window_title,
+                   uint32_t width,
+                   uint32_t height)
 {
+    strncpy(EXECUTABLE_PATH, argv0, sizeof(EXECUTABLE_PATH));
+    int n = strlen(EXECUTABLE_PATH) - 1;
+    while (n >= 0 && EXECUTABLE_PATH[n] != '/')
+    {
+        n--;
+    }
+    EXECUTABLE_PATH[n] = '\0';
+
     FOR_ALL_GLX_FUNCTIONS(DO_LOAD_GL_FUNCTION);
     FOR_ALL_GL_FUNCTIONS(DO_LOAD_GL_FUNCTION);
 
@@ -112,23 +123,18 @@ bool platform_init(const char* window_title, uint32_t width, uint32_t height)
             return false;
         }
 
+        // clang-format off
         int requiredConfigAttributes[] = {
-            GLX_X_RENDERABLE,
-            true,
-            GLX_DRAWABLE_TYPE,
-            GLX_WINDOW_BIT,
-            GLX_X_VISUAL_TYPE,
-            GLX_TRUE_COLOR,
-            GLX_DRAWABLE_TYPE,
-            GLX_WINDOW_BIT,
-            GLX_BUFFER_SIZE,
-            32,
-            GLX_DOUBLEBUFFER,
-            true,
-            GLX_SAMPLES,
-            16,
+            GLX_X_RENDERABLE,  true,
+            GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+            GLX_X_VISUAL_TYPE, GLX_TRUE_COLOR,
+            GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+            GLX_BUFFER_SIZE,   32,
+            GLX_DOUBLEBUFFER,  true,
+            GLX_SAMPLES,       4,
             None,
         };
+        // clang-format on
 
         int matchingConfigCount;
         GLXFBConfig* availableConfigs =

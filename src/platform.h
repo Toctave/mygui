@@ -5,6 +5,8 @@
 
 #include "opengl_functions.h"
 
+char EXECUTABLE_PATH[1024];
+
 enum
 {
     MOUSE_BUTTON_LEFT = 1 << 0,
@@ -31,7 +33,10 @@ typedef struct platform_input_info_t
 typedef struct platform_file_t platform_file_t;
 
 void platform_handle_input_events(platform_input_info_t* input);
-bool platform_init(const char* window_title, uint32_t width, uint32_t height);
+bool platform_init(const char* argv0,
+                   const char* window_title,
+                   uint32_t width,
+                   uint32_t height);
 void platform_swap_buffers();
 
 bool platform_running_under_debugger();
@@ -46,3 +51,8 @@ uint64_t platform_get_file_size(platform_file_t* file);
 uint64_t platform_read_file(platform_file_t* file, void* buffer, uint64_t size);
 
 uint64_t platform_get_nanoseconds();
+
+void* platform_open_shared_library(const char* path);
+void platform_close_shared_library(void* lib);
+
+void* platform_get_symbol_address(void* lib, const char* name);

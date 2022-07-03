@@ -2,12 +2,16 @@
 
 #include "assert.h"
 
+#include "logging.h"
+
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <stdio.h>
 #include <time.h>
 
 // source : https://forum.juce.com/t/detecting-if-a-process-is-being-run-under-a-debugger/2098
@@ -123,4 +127,32 @@ uint64_t platform_get_nanoseconds()
     clock_gettime(CLOCK_MONOTONIC, &now);
 
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
+}
+
+void* platform_open_shared_library(const char* name)
+{
+    char file_name[2048];
+    snprintf(file_name,
+             sizeof(file_name),
+             "%s/lib%s.so",
+             EXECUTABLE_PATH,
+             name);
+    // TODO(octave) : check that the path isn't too long
+
+    void* result = dlopen(file_name, RTLD_NOW | RTLD_GLOBAL);
+    if (!result)
+    {
+        fprintf(stderr,
+                "Could not open shared library '%s' : %s",
+                file_name,
+                dlerror());
+    }
+    return result;
+}
+
+void platform_close_shared_library(void* lib) { dlclose(lib); }
+
+void* platform_get_symbol_address(void* lib, const char* name)
+{
+    return dlsym(lib, name);
 }

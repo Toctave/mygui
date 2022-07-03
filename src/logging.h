@@ -8,7 +8,9 @@ typedef enum log_severity_e
     ERROR,
 } log_severity_e;
 
-void log_init();
+typedef struct mem_allocator_i mem_allocator_i;
+
+void log_init(mem_allocator_i* alloc);
 void log_terminate();
 
 void log_message(log_severity_e severity, const char* fmt, ...)

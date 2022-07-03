@@ -157,7 +157,7 @@ void texture_set_data(texture_t* texture, uint8_t* data)
 
 void* read_alloc_file(mem_stack_allocator_o* alloc, const char* path)
 {
-    platform_file_t* f = platform_open_file(path);
+    platform_file_o* f = platform_open_file(path);
     if (!f)
     {
         return 0;
@@ -180,7 +180,7 @@ void* read_alloc_file(mem_stack_allocator_o* alloc, const char* path)
 
 char* read_alloc_text_file(mem_stack_allocator_o* alloc, const char* path)
 {
-    platform_file_t* f = platform_open_file(path);
+    platform_file_o* f = platform_open_file(path);
     if (!f)
     {
         return 0;

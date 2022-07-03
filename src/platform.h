@@ -30,7 +30,7 @@ typedef struct platform_input_info_t
     uint32_t height;
 } platform_input_info_t;
 
-typedef struct platform_file_t platform_file_t;
+typedef struct platform_file_o platform_file_o;
 
 void platform_handle_input_events(platform_input_info_t* input);
 bool platform_init(const char* argv0,
@@ -44,11 +44,11 @@ bool platform_running_under_debugger();
 void* platform_virtual_alloc(uint64_t size);
 void platform_virtual_free(void* ptr, uint64_t size);
 
-platform_file_t* platform_open_file();
-void platform_close_file(platform_file_t* file);
+platform_file_o* platform_open_file();
+void platform_close_file(platform_file_o* file);
 
-uint64_t platform_get_file_size(platform_file_t* file);
-uint64_t platform_read_file(platform_file_t* file, void* buffer, uint64_t size);
+uint64_t platform_get_file_size(platform_file_o* file);
+uint64_t platform_read_file(platform_file_o* file, void* buffer, uint64_t size);
 
 uint64_t platform_get_nanoseconds();
 

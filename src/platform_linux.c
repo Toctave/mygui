@@ -70,14 +70,14 @@ platform_read_binary_file(void* buffer, uint64_t size, const char* path)
     return bytes_read;
 }
 
-static platform_file_t* fd_to_ptr(int fd)
+static platform_file_o* fd_to_ptr(int fd)
 {
-    return (platform_file_t*)((int64_t)fd + 1);
+    return (platform_file_o*)((int64_t)fd + 1);
 }
 
-static int ptr_to_fd(platform_file_t* ptr) { return (int64_t)ptr - 1; }
+static int ptr_to_fd(platform_file_o* ptr) { return (int64_t)ptr - 1; }
 
-platform_file_t* platform_open_file(const char* path)
+platform_file_o* platform_open_file(const char* path)
 {
     int64_t fd = open(path, O_RDONLY);
     if (fd < 0)
@@ -88,13 +88,13 @@ platform_file_t* platform_open_file(const char* path)
     return fd_to_ptr(fd);
 }
 
-void platform_close_file(platform_file_t* file)
+void platform_close_file(platform_file_o* file)
 {
     int fd = ptr_to_fd(file);
     close(fd);
 }
 
-uint64_t platform_get_file_size(platform_file_t* file)
+uint64_t platform_get_file_size(platform_file_o* file)
 {
     int fd = ptr_to_fd(file);
     struct stat statbuf;
@@ -107,7 +107,7 @@ uint64_t platform_get_file_size(platform_file_t* file)
     return statbuf.st_size;
 }
 
-uint64_t platform_read_file(platform_file_t* file, void* buffer, uint64_t size)
+uint64_t platform_read_file(platform_file_o* file, void* buffer, uint64_t size)
 {
     int fd = ptr_to_fd(file);
 

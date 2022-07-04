@@ -89,7 +89,7 @@ void* load_plugin(const char* name, version_t version)
         {
             found = alloc_plugin();
 
-            strncpy(found->spec.name, name, MAX_PLUGIN_NAME_SIZE);
+            strncpy(found->spec.name, name, MAX_PLUGIN_NAME_SIZE - 1);
 
             found->lib = lib;
             found->api = 0;

@@ -2,7 +2,7 @@ compiler=gcc
 
 mkdir -p build
 
-common_flags="-g"
+common_flags="-g -O0"
 
 memory_sources="src/memory.c"
 exe_sources="src/main.c \
@@ -13,7 +13,8 @@ src/platform_linux.c \
 src/hash.c \
 src/data_model.c \
 src/util.c \
-src/plugin_manager.c"
+src/plugin_manager.c \
+src/stretchy_buffer.c"
 
 libs="-lGLX -lX11 -lGL -lm -ldl"
 warnings="-Wall -Wextra -Wpedantic"

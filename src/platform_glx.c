@@ -74,7 +74,7 @@ bool platform_init(const char* argv0,
                    uint32_t width,
                    uint32_t height)
 {
-    strncpy(EXECUTABLE_PATH, argv0, sizeof(EXECUTABLE_PATH));
+    strncpy(EXECUTABLE_PATH, argv0, sizeof(EXECUTABLE_PATH) - 1);
     int n = strlen(EXECUTABLE_PATH) - 1;
     while (n >= 0 && EXECUTABLE_PATH[n] != '/')
     {

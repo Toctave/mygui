@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "assert.h"
+#include "data_model.h"
 #include "hash.h"
 #include "logging.h"
 #include "memory.h"
@@ -209,7 +210,7 @@ GLuint compile_shader_stage(mem_stack_allocator_o* tmp,
                             const char* path,
                             shader_stage_e stage_type)
 {
-    GLenum gl_stage_type;
+    GLenum gl_stage_type = 0;
     switch (stage_type)
     {
     case SHADER_STAGE_FRAGMENT:
@@ -1558,6 +1559,13 @@ static void test_hash()
     log_flush();
 }
 
+typedef struct blob_t
+{
+    int u;
+    char w[43];
+    float x;
+} blob_t;
+
 int main(int argc, const char** argv)
 {
     (void)argc;
@@ -1575,6 +1583,34 @@ int main(int argc, const char** argv)
 
     log_init(mem->vm);
     test_hash();
+
+    database_t db;
+    db_init(&db, mem->std);
+
+    property_definition_t props[] = {
+        {"active", PTYPE_BOOL},
+        {"x", PTYPE_FLOAT64},
+        {"y", PTYPE_FLOAT64},
+        {"blob", PTYPE_BUFFER},
+    };
+    uint16_t typ = add_object_type(&db, ARRAY_COUNT(props), props);
+
+    log_debug("typ = %u", typ);
+
+    object_id_t id = add_object(&db, typ);
+
+    set_float(&db, id, "x", 3.0);
+    for (uint32_t i = 0; i < 100; i++)
+    {
+        object_id_t id = add_object(&db, typ);
+        reallocate_buffer(&db, id, "blob", sizeof(blob_t));
+
+        log_debug("ID : %u %u %u\n",
+                  id.info.type,
+                  id.info.generation,
+                  id.info.slot);
+    }
+    log_debug("x = %g", get_float(&db, id, "x"));
 
     void* tmp_stack_buf = mem_alloc(mem->vm, Gibi(1024));
     mem_stack_allocator_o* tmp_alloc =

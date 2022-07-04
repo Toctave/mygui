@@ -11,7 +11,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 // source : https://forum.juce.com/t/detecting-if-a-process-is-being-run-under-a-debugger/2098
@@ -42,7 +44,14 @@ void* platform_virtual_alloc(uint64_t size)
                         -1,
                         0);
 
-    ASSERT(result != MAP_FAILED);
+    if (result == MAP_FAILED)
+    {
+        fprintf(stderr,
+                "Call to mmap(%lu) failed : %s\n",
+                size,
+                strerror(errno));
+        return 0;
+    }
 
     return result;
 }

@@ -5,6 +5,7 @@
 #include "plugin_sdk.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 static void* load();
 
@@ -46,21 +47,21 @@ static void* vm_realloc(struct mem_allocator_impl* impl,
     (void)filename;
     (void)line_number;
 
+    void* new_ptr = 0;
+    if (new_size)
+    {
+        new_ptr = platform_virtual_alloc(new_size);
+    }
+
     if (ptr)
     {
+        uint64_t copy_size = old_size < new_size ? old_size : new_size;
+        memcpy(new_ptr, ptr, copy_size);
+
         platform_virtual_free(ptr, old_size);
     }
 
-    if (new_size)
-    {
-        ptr = platform_virtual_alloc(new_size);
-    }
-    else
-    {
-        ptr = 0;
-    }
-
-    return ptr;
+    return new_ptr;
 }
 
 struct mem_stack_allocator_o

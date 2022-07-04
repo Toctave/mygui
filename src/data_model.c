@@ -3,7 +3,17 @@
 #include "memory.h"
 #include "stretchy_buffer.h"
 
+#include "plugin_sdk.h"
+
 #include <string.h>
+
+struct database_o
+{
+    mem_allocator_i* alloc;
+    /* array */ property_layout_t* properties;
+    /* array */ object_type_definition_t* object_types;
+    /* array */ object_slot_t* objects;
+};
 
 typedef struct object_t
 {
@@ -17,14 +27,18 @@ union object_slot_t
     object_t object;
 };
 
-void db_init(database_t* db, mem_allocator_i* alloc)
+static database_o* create(mem_allocator_i* alloc)
 {
-    *db = (database_t){0};
+    database_o* db = mem_alloc(alloc, sizeof(database_o));
+
+    *db = (database_o){0};
     db->alloc = alloc;
 
     array_push(db->alloc, db->object_types, (object_type_definition_t){0});
     array_push(db->alloc, db->properties, (property_layout_t){0});
     array_push(db->alloc, db->objects, (object_slot_t){0});
+
+    return db;
 }
 
 static uint32_t property_size(const property_definition_t* property)
@@ -48,9 +62,9 @@ static uint32_t property_size(const property_definition_t* property)
     return 0;
 }
 
-uint16_t add_object_type(database_t* db,
-                         uint32_t property_count,
-                         property_definition_t* properties)
+static uint16_t add_object_type(database_o* db,
+                                uint32_t property_count,
+                                property_definition_t* properties)
 {
     object_type_definition_t def;
     def.first_property = array_count(db->properties);
@@ -76,7 +90,7 @@ uint16_t add_object_type(database_t* db,
     return array_count(db->object_types) - 1;
 }
 
-object_t* get_object(database_t* db, object_id_t id)
+static object_t* get_object(database_o* db, object_id_t id)
 {
     ASSERT(id.index);
     ASSERT(id.info.slot < array_count(db->objects));
@@ -97,7 +111,7 @@ object_t* get_object(database_t* db, object_id_t id)
 }
 
 static const property_layout_t*
-get_property_by_name(database_t* db, uint32_t type_index, const char* prop_name)
+get_property_by_name(database_o* db, uint32_t type_index, const char* prop_name)
 {
     ASSERT(type_index && type_index < array_count(db->object_types));
     const object_type_definition_t* type = &db->object_types[type_index];
@@ -115,11 +129,11 @@ get_property_by_name(database_t* db, uint32_t type_index, const char* prop_name)
     return 0;
 }
 
-void* get_property_ptr_full(database_t* db,
-                            object_id_t id,
-                            uint16_t property_type,
-                            uint16_t object_type,
-                            const char* name)
+static void* get_property_ptr_full(database_o* db,
+                                   object_id_t id,
+                                   uint16_t property_type,
+                                   uint16_t object_type,
+                                   const char* name)
 {
     const property_layout_t* prop =
         get_property_by_name(db, id.info.type, name);
@@ -142,15 +156,15 @@ void* get_property_ptr_full(database_t* db,
     }
 }
 
-void* get_property_ptr(database_t* db,
-                       object_id_t id,
-                       uint32_t property_type,
-                       const char* name)
+static void* get_property_ptr(database_o* db,
+                              object_id_t id,
+                              uint32_t property_type,
+                              const char* name)
 {
     return get_property_ptr_full(db, id, property_type, 0, name);
 }
 
-double get_float(database_t* db, object_id_t id, const char* name)
+static double get_float(database_o* db, object_id_t id, const char* name)
 {
     double* ptr = get_property_ptr(db, id, PTYPE_FLOATING, name);
 
@@ -165,7 +179,8 @@ double get_float(database_t* db, object_id_t id, const char* name)
     }
 }
 
-void set_float(database_t* db, object_id_t id, const char* name, double value)
+static void
+set_float(database_o* db, object_id_t id, const char* name, double value)
 {
     double* ptr = get_property_ptr(db, id, PTYPE_FLOATING, name);
 
@@ -179,7 +194,7 @@ void set_float(database_t* db, object_id_t id, const char* name, double value)
     }
 }
 
-int64_t get_int(database_t* db, object_id_t id, const char* name)
+static int64_t get_int(database_o* db, object_id_t id, const char* name)
 {
     int64_t* ptr = get_property_ptr(db, id, PTYPE_INTEGER, name);
 
@@ -194,7 +209,8 @@ int64_t get_int(database_t* db, object_id_t id, const char* name)
     }
 }
 
-void set_int(database_t* db, object_id_t id, const char* name, int64_t value)
+static void
+set_int(database_o* db, object_id_t id, const char* name, int64_t value)
 {
     int64_t* ptr = get_property_ptr(db, id, PTYPE_INTEGER, name);
 
@@ -208,10 +224,10 @@ void set_int(database_t* db, object_id_t id, const char* name, int64_t value)
     }
 }
 
-bool reallocate_buffer(database_t* db,
-                       object_id_t id,
-                       const char* name,
-                       uint64_t size)
+static bool reallocate_buffer(database_o* db,
+                              object_id_t id,
+                              const char* name,
+                              uint64_t size)
 {
     buffer_t* ptr = get_property_ptr(db, id, PTYPE_BUFFER, name);
 
@@ -228,12 +244,12 @@ bool reallocate_buffer(database_t* db,
     }
 }
 
-bool get_buffer_data(database_t* db,
-                     object_id_t id,
-                     const char* name,
-                     uint64_t offset,
-                     uint64_t size,
-                     void* data)
+static bool get_buffer_data(database_o* db,
+                            object_id_t id,
+                            const char* name,
+                            uint64_t offset,
+                            uint64_t size,
+                            void* data)
 {
     buffer_t* ptr = get_property_ptr(db, id, PTYPE_BUFFER, name);
 
@@ -250,12 +266,12 @@ bool get_buffer_data(database_t* db,
     }
 }
 
-bool set_buffer_data(database_t* db,
-                     object_id_t id,
-                     const char* name,
-                     uint64_t offset,
-                     uint64_t size,
-                     const void* data)
+static bool set_buffer_data(database_o* db,
+                            object_id_t id,
+                            const char* name,
+                            uint64_t offset,
+                            uint64_t size,
+                            const void* data)
 {
     buffer_t* ptr = get_property_ptr(db, id, PTYPE_BUFFER, name);
 
@@ -272,7 +288,8 @@ bool set_buffer_data(database_t* db,
     }
 }
 
-object_id_t get_sub_object(database_t* db, object_id_t id, const char* name)
+static object_id_t
+get_sub_object(database_o* db, object_id_t id, const char* name)
 {
     object_id_t* ptr = get_property_ptr(db, id, PTYPE_OBJECT, name);
 
@@ -287,7 +304,8 @@ object_id_t get_sub_object(database_t* db, object_id_t id, const char* name)
     }
 }
 
-object_id_t get_reference(database_t* db, object_id_t id, const char* name)
+static object_id_t
+get_reference(database_o* db, object_id_t id, const char* name)
 {
     object_id_t* ptr = get_property_ptr(db, id, PTYPE_REFERENCE, name);
 
@@ -302,10 +320,10 @@ object_id_t get_reference(database_t* db, object_id_t id, const char* name)
     }
 }
 
-void set_reference(database_t* db,
-                   object_id_t id,
-                   const char* name,
-                   object_id_t value)
+static void set_reference(database_o* db,
+                          object_id_t id,
+                          const char* name,
+                          object_id_t value)
 {
     object_id_t* ptr =
         get_property_ptr_full(db, id, PTYPE_REFERENCE, value.info.type, name);
@@ -320,7 +338,7 @@ void set_reference(database_t* db,
     }
 }
 
-void delete_object(database_t* db, object_id_t id)
+static void delete_object(database_o* db, object_id_t id)
 {
     object_t* object = get_object(db, id);
     if (!object)
@@ -358,7 +376,7 @@ void delete_object(database_t* db, object_id_t id)
     db->objects[0].next_free = id.info.slot;
 }
 
-object_id_t add_object(database_t* db, uint16_t type_index)
+static object_id_t add_object(database_o* db, uint16_t type_index)
 {
     if (type_index == 0 || type_index >= array_count(db->object_types))
     {
@@ -396,3 +414,33 @@ object_id_t add_object(database_t* db, uint16_t type_index)
 
     return object->id;
 }
+
+static void* load()
+{
+    static database_api db;
+
+    db.create = create;
+    db.destroy = 0; // TODO(octave)
+    db.add_object_type = add_object_type;
+    db.add_object = add_object;
+    db.delete_object = delete_object;
+    db.get_float = get_float;
+    db.set_float = set_float;
+    db.get_int = get_int;
+    db.set_int = set_int;
+    db.get_sub_object = get_sub_object;
+    db.get_reference = get_reference;
+    db.set_reference = set_reference;
+    db.reallocate_buffer = reallocate_buffer;
+    db.get_buffer_data = get_buffer_data;
+    db.set_buffer_data = set_buffer_data;
+
+    return &db;
+}
+
+plugin_spec_t PLUGIN_SPEC = {
+    .name = "database",
+    .version = {0, 0, 1},
+    .load = load,
+    .unload = 0,
+};

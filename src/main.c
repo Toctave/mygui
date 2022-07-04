@@ -91,6 +91,7 @@ typedef struct renderer_t
 } renderer_t;
 
 static mem_api* mem;
+static database_api* db;
 
 color_t color_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
@@ -1625,12 +1626,13 @@ int main(int argc, const char** argv)
     plugin_manager_init();
     mem = load_plugin("memory", (version_t){1, 0, 0});
     ASSERT(mem);
+    db = load_plugin("database", (version_t){0, 0, 1});
+    ASSERT(db);
 
     log_init(mem->vm);
     test_hash();
 
-    database_t db;
-    db_init(&db, mem->std);
+    database_o* mydb = db->create(mem->std);
 
     property_definition_t props[] = {
         {.name = "active", .type = PTYPE_BOOL},
@@ -1638,39 +1640,39 @@ int main(int argc, const char** argv)
         {.name = "y", .type = PTYPE_FLOATING},
         {.name = "blob", .type = PTYPE_BUFFER},
     };
-    uint16_t typ = add_object_type(&db, ARRAY_COUNT(props), props);
+    uint16_t typ = db->add_object_type(mydb, ARRAY_COUNT(props), props);
 
     property_definition_t nprops[] = {
         {.name = "subobject", .type = PTYPE_OBJECT, .object_type = typ},
         {.name = "reference", .type = PTYPE_REFERENCE, .object_type = typ},
     };
-    uint16_t ntyp = add_object_type(&db, ARRAY_COUNT(nprops), nprops);
+    uint16_t ntyp = db->add_object_type(mydb, ARRAY_COUNT(nprops), nprops);
 
     log_debug("typ = %u", typ);
 
-    object_id_t nobj = add_object(&db, ntyp);
-    object_id_t obj = add_object(&db, typ);
+    object_id_t nobj = db->add_object(mydb, ntyp);
+    object_id_t obj = db->add_object(mydb, typ);
     blob_t my_blob = {-12, "123", 3.14f};
 
-    reallocate_buffer(&db, obj, "blob", sizeof(blob_t));
-    set_buffer_data(&db, obj, "blob", 0, sizeof(blob_t), &my_blob);
+    db->reallocate_buffer(mydb, obj, "blob", sizeof(blob_t));
+    db->set_buffer_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
 
-    object_id_t obj2 = get_sub_object(&db, nobj, "subobject");
-    reallocate_buffer(&db, obj2, "blob", sizeof(blob_t));
-    set_buffer_data(&db, obj2, "blob", 0, sizeof(blob_t), &my_blob);
+    object_id_t obj2 = db->get_sub_object(mydb, nobj, "subobject");
+    db->reallocate_buffer(mydb, obj2, "blob", sizeof(blob_t));
+    db->set_buffer_data(mydb, obj2, "blob", 0, sizeof(blob_t), &my_blob);
 
-    set_float(&db, obj, "x", 3.0);
+    db->set_float(mydb, obj, "x", 3.0);
     for (uint32_t i = 0; i < 100; i++)
     {
-        object_id_t id = add_object(&db, typ);
+        object_id_t id = db->add_object(mydb, typ);
 
         log_debug("ID : %u %u %u\n",
                   id.info.type,
                   id.info.generation,
                   id.info.slot);
     }
-    log_debug("obj.x = %g", get_float(&db, obj, "x"));
-    get_buffer_data(&db, obj, "blob", 0, sizeof(blob_t), &my_blob);
+    log_debug("obj.x = %g", db->get_float(mydb, obj, "x"));
+    db->get_buffer_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
     log_debug("obj.blob = { .u = %d, .w = \"%s\", .x = %f }",
               my_blob.u,
               my_blob.w,

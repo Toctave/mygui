@@ -7,20 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void* load();
-
-plugin_spec_t PLUGIN_SPEC = {
-    .name = "memory",
-    .version = {1, 0, 0},
-    .load = load,
-    .unload = 0,
-};
-
 #define MAX_ALIGNMENT 8
-
-static mem_api mem;
-static mem_allocator_i std;
-static mem_allocator_i vm;
 
 static void* std_realloc(struct mem_allocator_impl* impl,
                          void* ptr,
@@ -133,6 +120,10 @@ static void* stack_push(mem_stack_allocator_o* alloc, uint64_t size)
 
 static void* load()
 {
+    static mem_api mem;
+    static mem_allocator_i std;
+    static mem_allocator_i vm;
+
     std.realloc = std_realloc;
     vm.realloc = vm_realloc;
 
@@ -147,3 +138,10 @@ static void* load()
 
     return &mem;
 }
+
+plugin_spec_t PLUGIN_SPEC = {
+    .name = "memory",
+    .version = {1, 0, 0},
+    .load = load,
+    .unload = 0,
+};

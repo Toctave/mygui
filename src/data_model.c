@@ -33,12 +33,16 @@ static uint32_t property_size(const property_definition_t* property)
     {
     case PTYPE_BOOL:
         return 1;
-    case PTYPE_INT64:
+    case PTYPE_INTEGER:
         return 8;
-    case PTYPE_FLOAT64:
+    case PTYPE_FLOATING:
         return 8;
     case PTYPE_BUFFER:
         return sizeof(buffer_t);
+    case PTYPE_OBJECT:
+        return sizeof(object_id_t);
+    case PTYPE_REFERENCE:
+        return sizeof(object_id_t);
     }
     ASSERT_MSG(false, "Unknown property type %u", property->type);
     return 0;
@@ -74,6 +78,7 @@ uint16_t add_object_type(database_t* db,
 
 object_t* get_object(database_t* db, object_id_t id)
 {
+    ASSERT(id.index);
     ASSERT(id.info.slot < array_count(db->objects));
 
     object_t* object = &db->objects[id.info.slot].object;
@@ -94,7 +99,7 @@ object_t* get_object(database_t* db, object_id_t id)
 static const property_layout_t*
 get_property_by_name(database_t* db, uint32_t type_index, const char* prop_name)
 {
-    ASSERT(type_index < array_count(db->object_types));
+    ASSERT(type_index && type_index < array_count(db->object_types));
     const object_type_definition_t* type = &db->object_types[type_index];
     for (uint32_t i = 0; i < type->property_count; i++)
     {
@@ -110,15 +115,18 @@ get_property_by_name(database_t* db, uint32_t type_index, const char* prop_name)
     return 0;
 }
 
-void* get_property_ptr(database_t* db,
-                       object_id_t id,
-                       uint32_t property_type,
-                       const char* name)
+void* get_property_ptr_full(database_t* db,
+                            object_id_t id,
+                            uint16_t property_type,
+                            uint16_t object_type,
+                            const char* name)
 {
     const property_layout_t* prop =
         get_property_by_name(db, id.info.type, name);
 
-    if (!prop || prop->def.type != property_type)
+    if (!prop //
+        || prop->def.type != property_type
+        || (object_type && prop->def.object_type != object_type))
     {
         return 0;
     }
@@ -134,9 +142,17 @@ void* get_property_ptr(database_t* db,
     }
 }
 
+void* get_property_ptr(database_t* db,
+                       object_id_t id,
+                       uint32_t property_type,
+                       const char* name)
+{
+    return get_property_ptr_full(db, id, property_type, 0, name);
+}
+
 double get_float(database_t* db, object_id_t id, const char* name)
 {
-    double* ptr = get_property_ptr(db, id, PTYPE_FLOAT64, name);
+    double* ptr = get_property_ptr(db, id, PTYPE_FLOATING, name);
 
     if (!ptr)
     {
@@ -151,7 +167,7 @@ double get_float(database_t* db, object_id_t id, const char* name)
 
 void set_float(database_t* db, object_id_t id, const char* name, double value)
 {
-    double* ptr = get_property_ptr(db, id, PTYPE_FLOAT64, name);
+    double* ptr = get_property_ptr(db, id, PTYPE_FLOATING, name);
 
     if (!ptr)
     {
@@ -165,7 +181,7 @@ void set_float(database_t* db, object_id_t id, const char* name, double value)
 
 int64_t get_int(database_t* db, object_id_t id, const char* name)
 {
-    int64_t* ptr = get_property_ptr(db, id, PTYPE_INT64, name);
+    int64_t* ptr = get_property_ptr(db, id, PTYPE_INTEGER, name);
 
     if (!ptr)
     {
@@ -180,7 +196,7 @@ int64_t get_int(database_t* db, object_id_t id, const char* name)
 
 void set_int(database_t* db, object_id_t id, const char* name, int64_t value)
 {
-    int64_t* ptr = get_property_ptr(db, id, PTYPE_INT64, name);
+    int64_t* ptr = get_property_ptr(db, id, PTYPE_INTEGER, name);
 
     if (!ptr)
     {
@@ -256,6 +272,54 @@ bool set_buffer_data(database_t* db,
     }
 }
 
+object_id_t get_sub_object(database_t* db, object_id_t id, const char* name)
+{
+    object_id_t* ptr = get_property_ptr(db, id, PTYPE_OBJECT, name);
+
+    if (!ptr)
+    {
+        // TODO(octave) : error handling.
+        return (object_id_t){0};
+    }
+    else
+    {
+        return *ptr;
+    }
+}
+
+object_id_t get_reference(database_t* db, object_id_t id, const char* name)
+{
+    object_id_t* ptr = get_property_ptr(db, id, PTYPE_REFERENCE, name);
+
+    if (!ptr)
+    {
+        // TODO(octave) : error handling.
+        return (object_id_t){0};
+    }
+    else
+    {
+        return *ptr;
+    }
+}
+
+void set_reference(database_t* db,
+                   object_id_t id,
+                   const char* name,
+                   object_id_t value)
+{
+    object_id_t* ptr =
+        get_property_ptr_full(db, id, PTYPE_REFERENCE, value.info.type, name);
+
+    if (!ptr)
+    {
+        // TODO(octave) : error handling.
+    }
+    else
+    {
+        *ptr = value;
+    }
+}
+
 void delete_object(database_t* db, object_id_t id)
 {
     object_t* object = get_object(db, id);
@@ -275,6 +339,13 @@ void delete_object(database_t* db, object_id_t id)
 
             mem_free(db->alloc, buf->data, buf->size);
         }
+        else if (prop->def.type == PTYPE_OBJECT)
+        {
+            object_id_t* sub_id =
+                (object_id_t*)((uint8_t*)object->data + prop->offset);
+
+            delete_object(db, *sub_id);
+        }
     }
 
     ASSERT(object->data);
@@ -289,7 +360,10 @@ void delete_object(database_t* db, object_id_t id)
 
 object_id_t add_object(database_t* db, uint16_t type_index)
 {
-    ASSERT(type_index < array_count(db->object_types));
+    if (type_index == 0 || type_index >= array_count(db->object_types))
+    {
+        return (object_id_t){0};
+    }
 
     uint32_t slot_index = db->objects[0].next_free;
     if (!slot_index)
@@ -305,6 +379,20 @@ object_id_t add_object(database_t* db, uint16_t type_index)
 
     object->data = mem_alloc(db->alloc, db->object_types[type_index].bytes);
     memset(object->data, 0, db->object_types[type_index].bytes);
+
+    object_type_definition_t* type = &db->object_types[type_index];
+    for (uint32_t i = 0; i < type->property_count; i++)
+    {
+        property_layout_t* prop = &db->properties[type->first_property + i];
+
+        if (prop->def.type == PTYPE_OBJECT)
+        {
+            object_id_t* sub_id =
+                (object_id_t*)((uint8_t*)object->data + prop->offset);
+
+            *sub_id = add_object(db, prop->def.object_type);
+        }
+    }
 
     return object->id;
 }

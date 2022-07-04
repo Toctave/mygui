@@ -1360,6 +1360,51 @@ bool ui_button(const char* txt)
     return result;
 }
 
+quad_i32_t quad_i32_grown(quad_i32_t q, int32_t offset)
+{
+    return (quad_i32_t){
+        .min = {q.min[0] + offset, q.min[1] + offset},
+        .extent = {q.extent[0] - 2 * offset, q.extent[1] - 2 * offset}};
+}
+
+bool ui_checkbox(const char* txt, bool* value)
+{
+    ui_push_string_id(txt);
+
+    /* int32_t width = */
+    /* ui.renderer->font.bbox.extent[0] * strlen(txt) + 2 * ui.padding; */
+    int32_t width = ui.line_height;
+    int32_t height = ui.line_height;
+    int32_t x = ui.cursor_x;
+    int32_t y = ui.cursor_y;
+
+    bool clicked = ui_handle_hold_and_release(x, y, width, height);
+    if (clicked)
+    {
+        *value = !*value;
+    }
+
+    quad_i32_t pos_quad = {{x, y}, {width, height}};
+    draw_colored_quad(ui.renderer, pos_quad, ui.colors.secondary);
+
+    if (*value)
+    {
+        draw_colored_quad(ui.renderer,
+                          quad_i32_grown(pos_quad, width / 4),
+                          ui.colors.main);
+    }
+
+    /* ui_draw_text(txt, x, y); */
+
+    ui_draw_hover_and_active_overlay(x, y, width, height);
+
+    ui_pop_id();
+
+    ui_newline();
+
+    return clicked;
+}
+
 void ui_init(mem_stack_allocator_o* tmp_stack,
              renderer_t* renderer,
              platform_input_info_t* input)
@@ -1368,9 +1413,9 @@ void ui_init(mem_stack_allocator_o* tmp_stack,
     ui.renderer = renderer;
     ui.input = input;
 
-    ui.colors.main = color_gray(0x50);
+    ui.colors.main = color_gray(0x60);
     ui.colors.secondary = color_gray(0x30);
-    ui.colors.background = color_gray(0x20);
+    ui.colors.background = color_gray(0x10);
 
     ui.colors.text = color_gray(0xFF);
     ui.colors.text_shadow = color_gray(0x00);
@@ -1588,29 +1633,48 @@ int main(int argc, const char** argv)
     db_init(&db, mem->std);
 
     property_definition_t props[] = {
-        {"active", PTYPE_BOOL},
-        {"x", PTYPE_FLOAT64},
-        {"y", PTYPE_FLOAT64},
-        {"blob", PTYPE_BUFFER},
+        {.name = "active", .type = PTYPE_BOOL},
+        {.name = "x", .type = PTYPE_FLOATING},
+        {.name = "y", .type = PTYPE_FLOATING},
+        {.name = "blob", .type = PTYPE_BUFFER},
     };
     uint16_t typ = add_object_type(&db, ARRAY_COUNT(props), props);
 
+    property_definition_t nprops[] = {
+        {.name = "subobject", .type = PTYPE_OBJECT, .object_type = typ},
+        {.name = "reference", .type = PTYPE_REFERENCE, .object_type = typ},
+    };
+    uint16_t ntyp = add_object_type(&db, ARRAY_COUNT(nprops), nprops);
+
     log_debug("typ = %u", typ);
 
-    object_id_t id = add_object(&db, typ);
+    object_id_t nobj = add_object(&db, ntyp);
+    object_id_t obj = add_object(&db, typ);
+    blob_t my_blob = {-12, "123", 3.14f};
 
-    set_float(&db, id, "x", 3.0);
+    reallocate_buffer(&db, obj, "blob", sizeof(blob_t));
+    set_buffer_data(&db, obj, "blob", 0, sizeof(blob_t), &my_blob);
+
+    object_id_t obj2 = get_sub_object(&db, nobj, "subobject");
+    reallocate_buffer(&db, obj2, "blob", sizeof(blob_t));
+    set_buffer_data(&db, obj2, "blob", 0, sizeof(blob_t), &my_blob);
+
+    set_float(&db, obj, "x", 3.0);
     for (uint32_t i = 0; i < 100; i++)
     {
         object_id_t id = add_object(&db, typ);
-        reallocate_buffer(&db, id, "blob", sizeof(blob_t));
 
         log_debug("ID : %u %u %u\n",
                   id.info.type,
                   id.info.generation,
                   id.info.slot);
     }
-    log_debug("x = %g", get_float(&db, id, "x"));
+    log_debug("obj.x = %g", get_float(&db, obj, "x"));
+    get_buffer_data(&db, obj, "blob", 0, sizeof(blob_t), &my_blob);
+    log_debug("obj.blob = { .u = %d, .w = \"%s\", .x = %f }",
+              my_blob.u,
+              my_blob.w,
+              my_blob.x);
 
     void* tmp_stack_buf = mem_alloc(mem->vm, Gibi(1024));
     mem_stack_allocator_o* tmp_alloc =
@@ -1657,6 +1721,11 @@ int main(int argc, const char** argv)
             log_debug("Did the thingy");
         }
         if (ui_button("Undo the thingy"))
+        {
+        }
+
+        static bool b;
+        if (ui_checkbox("Redo the thingy", &b))
         {
         }
 

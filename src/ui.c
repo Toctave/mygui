@@ -11,6 +11,13 @@
 
 #include <math.h>
 
+enum drag_drop_state_e
+{
+    DRAG_DROP_NONE,
+    DRAG_DROP_DRAGGING,
+    DRAG_DROP_DROPPED,
+};
+
 struct
 {
     mem_api* mem;
@@ -24,7 +31,9 @@ struct
 
     uint64_t active_id;
     uint64_t hovered_id;
-    uint64_t dropped_id;
+
+    const void* drag_payload;
+    uint32_t drag_state;
 
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
@@ -192,6 +201,14 @@ bool handle_drag_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
 {
     int32_t dx;
     return handle_drag(x, y, w, h, &dx, dy) && *dy;
+}
+
+void start_drag_and_drop(const void* payload)
+{
+    ASSERT(ui.drag_state == DRAG_DROP_NONE);
+
+    ui.drag_payload = payload;
+    ui.drag_state = DRAG_DROP_DRAGGING;
 }
 
 static void newline() { ui.cursor_y += ui.line_height + ui.margin; }
@@ -476,6 +493,10 @@ static void plug(const char* name)
 
     if (ui.active_id == current_id())
     {
+        if (ui.drag_state == DRAG_DROP_NONE)
+        {
+            start_drag_and_drop(name);
+        }
         int32_t cx = draw_x + draw_width / 2;
         int32_t cy = draw_y + draw_width / 2;
         ui.renderer->draw_line(ui.renderer,
@@ -486,11 +507,10 @@ static void plug(const char* name)
                                4.0f,
                                color_rgb(0x00, 0x00, 0xff));
     }
-    else if (ui.hovered_id == current_id() && ui.dropped_id)
+    else if (ui.hovered_id == current_id()
+             && ui.drag_state == DRAG_DROP_DROPPED)
     {
-        log_debug("Tried to connect %lxu to %lxu",
-                  ui.dropped_id,
-                  ui.hovered_id);
+        log_debug("Dropped '%s' onto '%s'", (const char*)ui.drag_payload, name);
     }
 
     pop_id();
@@ -500,10 +520,10 @@ static void begin()
 {
     begin_draw_region(0, 0);
     ui.hovered_id = 0;
-    ui.dropped_id = 0;
-    if (ui.input->mouse_released & MOUSE_BUTTON_LEFT)
+    if (ui.drag_state == DRAG_DROP_DRAGGING
+        && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
     {
-        ui.dropped_id = ui.active_id;
+        ui.drag_state = DRAG_DROP_DROPPED;
     }
 }
 
@@ -513,6 +533,12 @@ static void end()
     ASSERT(ui.draw_region_stack_height == 0);
 
     ASSERT(ui.id_stack_height == 1);
+
+    if (ui.drag_state == DRAG_DROP_DROPPED)
+    {
+        ui.drag_state = DRAG_DROP_NONE;
+        ui.drag_payload = 0;
+    }
 }
 
 static void* load()

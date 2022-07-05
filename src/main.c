@@ -171,8 +171,8 @@ int main(int argc, const char** argv)
 
     uint64_t t0 = platform_get_nanoseconds();
 
-    quad_i32_t node = {{10, 10}, {200, 200}};
-    quad_i32_t node2 = {{10, 10}, {200, 200}};
+    quad_i32_t node = {{10, 200}, {200, 200}};
+    quad_i32_t node2 = {{220, 200}, {200, 200}};
 
     // main loop
     while (!input.should_exit)

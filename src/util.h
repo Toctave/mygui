@@ -15,7 +15,7 @@ typedef struct mem_stack_allocator_o mem_stack_allocator_o;
 #define Giga(v) (1000ull * Mega(v))
 #define Tera(v) (1000ull * Giga(v))
 
-#define ARRAY_COUNT(arr) (sizeof(arr) / sizeof(arr[0]))
+#define STATIC_ARRAY_COUNT(arr) (sizeof(arr) / sizeof(arr[0]))
 
 #define offsetof(type, member) ((uint8_t*)(&((type*)0)->member) - (uint8_t*)0)
 

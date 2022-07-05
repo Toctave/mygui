@@ -59,7 +59,7 @@ bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
 
 static void push_id(uint64_t id)
 {
-    ASSERT(ui.id_stack_height < ARRAY_COUNT(ui.id_stack));
+    ASSERT(ui.id_stack_height < STATIC_ARRAY_COUNT(ui.id_stack));
     uint64_t hashed =
         ui.id_stack_height
             ? hash_combine(ui.id_stack[ui.id_stack_height - 1], id)
@@ -84,7 +84,8 @@ static uint64_t current_id()
 
 static void begin_draw_region(int32_t x, int32_t y)
 {
-    ASSERT(ui.draw_region_stack_height < ARRAY_COUNT(ui.draw_region_stack));
+    ASSERT(ui.draw_region_stack_height
+           < STATIC_ARRAY_COUNT(ui.draw_region_stack));
 
     ui.draw_region_stack[ui.draw_region_stack_height][0] = ui.cursor_x;
     ui.draw_region_stack[ui.draw_region_stack_height][1] = ui.cursor_y;

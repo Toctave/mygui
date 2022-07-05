@@ -662,7 +662,7 @@ static GLuint compile_shader_stage(mem_api* mem,
 
     const char* sources[] = {source};
 
-    glShaderSource(stage, ARRAY_COUNT(sources), sources, 0);
+    glShaderSource(stage, STATIC_ARRAY_COUNT(sources), sources, 0);
 
     glCompileShader(stage);
     GLint ok;

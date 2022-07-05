@@ -80,13 +80,14 @@ static void test_db()
         {.name = "y", .type = PTYPE_FLOATING},
         {.name = "blob", .type = PTYPE_BUFFER},
     };
-    uint16_t typ = db->add_object_type(mydb, ARRAY_COUNT(props), props);
+    uint16_t typ = db->add_object_type(mydb, STATIC_ARRAY_COUNT(props), props);
 
     property_definition_t nprops[] = {
         {.name = "subobject", .type = PTYPE_OBJECT, .object_type = typ},
         {.name = "reference", .type = PTYPE_REFERENCE, .object_type = typ},
     };
-    uint16_t ntyp = db->add_object_type(mydb, ARRAY_COUNT(nprops), nprops);
+    uint16_t ntyp =
+        db->add_object_type(mydb, STATIC_ARRAY_COUNT(nprops), nprops);
 
     log_debug("typ = %u", typ);
 
@@ -123,6 +124,7 @@ static void test_db()
 
 int main(int argc, const char** argv)
 {
+    ASSERT(sizeof(void*) == sizeof(uint64_t));
     (void)argc;
 
     uint32_t window_width = 640;
@@ -152,7 +154,6 @@ int main(int argc, const char** argv)
     mem_stack_allocator_o* tmp_alloc =
         mem->stack_create(tmp_stack_buf, Gibi(1024));
 
-    ASSERT(sizeof(void*) == sizeof(uint64_t));
     void* permanent_stack_buf = mem_alloc(mem->vm, Gibi(1024));
     mem_stack_allocator_o* permanent_alloc =
         mem->stack_create(permanent_stack_buf, Gibi(1024));
@@ -177,7 +178,6 @@ int main(int argc, const char** argv)
     while (!input.should_exit)
     {
         mem->stack_revert(tmp_alloc, 0);
-        /* log_debug("active = %lu, hovered = %lu", ui.active_id, ui.hovered_id); */
         uint64_t now = platform_get_nanoseconds();
 
         float t = (now - t0) * 1e-9f;
@@ -193,11 +193,13 @@ int main(int argc, const char** argv)
         }
         if (ui->button("Undo the thingy"))
         {
+            log_debug("Undid the thingy");
         }
 
         static bool b;
-        if (ui->checkbox("Redo the thingy", &b))
+        if (ui->checkbox("Thingy on", &b))
         {
+            log_debug("The thingy is %s", b ? "on" : "off");
         }
 
         ui->begin_node("my node", &node);
@@ -212,9 +214,6 @@ int main(int argc, const char** argv)
         y = sinf(freq * t);
         ui->slider("freq", &freq, 0.0f, 10.0f);
         ui->slider("sin(freq * t)", &y, -1.0f, 1.0f);
-
-        /* char* txt = tprintf(mem, tmp_alloc, "Used : %zu", tmp_alloc->used); */
-        /* ui->draw_text(txt, 0, 300); */
 
         ui->end();
 

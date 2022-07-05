@@ -24,12 +24,12 @@ static plugin_slot_t plugin_table[1024];
 
 void plugin_manager_init()
 {
-    for (uint32_t i = 0; i < ARRAY_COUNT(plugin_table); i++)
+    for (uint32_t i = 0; i < STATIC_ARRAY_COUNT(plugin_table); i++)
     {
         plugin_table[i].next_free = i + 1;
     }
 
-    plugin_table[ARRAY_COUNT(plugin_table) - 1].next_free = 0;
+    plugin_table[STATIC_ARRAY_COUNT(plugin_table) - 1].next_free = 0;
 }
 
 static plugin_t* alloc_plugin()
@@ -62,7 +62,7 @@ bool versions_compatible(version_t required_version, version_t found_version)
 
 static plugin_t* find_plugin(const char* name, version_t version)
 {
-    for (uint32_t i = 1; i < ARRAY_COUNT(plugin_table); i++)
+    for (uint32_t i = 1; i < STATIC_ARRAY_COUNT(plugin_table); i++)
     {
         if (plugin_table[i].taken
             && !strncmp(name,

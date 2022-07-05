@@ -1,6 +1,6 @@
 #pragma once
 
-#include <inttypes.h>
+#include "base_types.h"
 
 typedef enum node_plug_type_e
 {

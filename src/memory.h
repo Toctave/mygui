@@ -1,6 +1,6 @@
 #pragma once
 
-#include <inttypes.h>
+#include "base_types.h"
 
 typedef struct mem_stack_allocator_o mem_stack_allocator_o;
 

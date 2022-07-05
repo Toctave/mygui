@@ -1,6 +1,6 @@
 #pragma once
 
-#include <inttypes.h>
+#include "base_types.h"
 
 typedef struct array_header_t
 {
@@ -13,6 +13,10 @@ array_header_t* array_header(void* ptr);
 typedef struct mem_allocator_i mem_allocator_i;
 
 void* array_grow(mem_allocator_i* alloc, void* ptr, uint32_t element_size);
+
+void array_free_(mem_allocator_i* alloc, void* ptr, uint32_t element_size);
+
+#define array_free(alloc, a) array_free_(alloc, a, sizeof(*a))
 
 #define array_count(a) ((a) ? array_header(a)->count : 0)
 

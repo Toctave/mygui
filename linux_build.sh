@@ -33,4 +33,5 @@ $compiler $common_flags $exe_flags $warnings $exe_sources -o build/oui $libs
 
 build_plugin "memory" "src/memory.c"
 build_plugin "database" "src/data_model.c"
+build_plugin "renderer" "src/renderer.c"
 

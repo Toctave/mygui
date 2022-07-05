@@ -7,6 +7,14 @@ array_header_t* array_header(void* ptr)
     return (array_header_t*)((char*)(ptr) - sizeof(array_header_t));
 }
 
+void array_free_(mem_allocator_i* alloc, void* ptr, uint32_t element_size)
+{
+    array_header_t* header = array_header(ptr);
+    mem_free(alloc,
+             header,
+             sizeof(array_header_t) + element_size * header->capacity);
+}
+
 void* array_grow(mem_allocator_i* alloc, void* ptr, uint32_t element_size)
 {
     if (!ptr)

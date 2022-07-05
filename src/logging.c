@@ -4,7 +4,7 @@
 #include "platform.h"
 #include "util.h"
 
-#include <inttypes.h>
+#include "base_types.h"
 #include <stdarg.h>
 #include <stdio.h>
 

@@ -1,15 +1,9 @@
 #pragma once
 
-#include <inttypes.h>
-#include <stdbool.h>
+#include "base_types.h"
 
+typedef struct database_o database_o;
 typedef struct mem_allocator_i mem_allocator_i;
-
-typedef struct buffer_t
-{
-    uint64_t size;
-    void* data;
-} buffer_t;
 
 typedef enum property_type_e
 {
@@ -29,21 +23,6 @@ typedef struct property_definition_t
     uint16_t object_type;
 } property_definition_t;
 
-typedef struct property_layout_t
-{
-    property_definition_t def;
-    uint32_t offset;
-} property_layout_t;
-
-typedef struct object_type_definition_t
-{
-    uint32_t first_property;
-    uint32_t property_count;
-    uint32_t bytes;
-} object_type_definition_t;
-
-typedef union object_slot_t object_slot_t;
-
 typedef union object_id_t
 {
     uint64_t index;
@@ -59,8 +38,6 @@ typedef union object_id_t
         uint16_t generation;
     } info;
 } object_id_t;
-
-typedef struct database_o database_o;
 
 typedef struct database_api
 {

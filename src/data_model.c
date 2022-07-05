@@ -7,6 +7,29 @@
 
 #include <string.h>
 
+typedef struct mem_allocator_i mem_allocator_i;
+
+typedef struct buffer_t
+{
+    uint64_t size;
+    void* data;
+} buffer_t;
+
+typedef struct property_layout_t
+{
+    property_definition_t def;
+    uint32_t offset;
+} property_layout_t;
+
+typedef struct object_type_definition_t
+{
+    uint32_t first_property;
+    uint32_t property_count;
+    uint32_t bytes;
+} object_type_definition_t;
+
+typedef union object_slot_t object_slot_t;
+
 struct database_o
 {
     mem_allocator_i* alloc;
@@ -39,6 +62,21 @@ static database_o* create(mem_allocator_i* alloc)
     array_push(db->alloc, db->objects, (object_slot_t){0});
 
     return db;
+}
+
+static void destroy(database_o* db)
+{
+    // TODO(octave) : check that all objects have been freed
+
+    array_free(db->alloc, db->object_types);
+    array_free(db->alloc, db->properties);
+    array_free(db->alloc, db->objects);
+
+    db->object_types = 0;
+    db->properties = 0;
+    db->objects = 0;
+
+    mem_free(db->alloc, db, sizeof(database_o));
 }
 
 static uint32_t property_size(const property_definition_t* property)
@@ -420,7 +458,7 @@ static void* load()
     static database_api db;
 
     db.create = create;
-    db.destroy = 0; // TODO(octave)
+    db.destroy = destroy;
     db.add_object_type = add_object_type;
     db.add_object = add_object;
     db.delete_object = delete_object;

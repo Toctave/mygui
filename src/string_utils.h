@@ -1,6 +1,6 @@
 #pragma once
 
-#include <inttypes.h>
+#include "base_types.h"
 
 typedef struct string_slice_t
 {

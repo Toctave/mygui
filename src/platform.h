@@ -1,8 +1,6 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
+#include "base_types.h"
 #include "opengl_functions.h"
 
 char EXECUTABLE_PATH[1024];

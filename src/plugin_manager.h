@@ -1,7 +1,6 @@
 #pragma once
 
-#include <inttypes.h>
-#include <stdbool.h>
+#include "base_types.h"
 
 #include "plugin_sdk.h"
 

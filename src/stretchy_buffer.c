@@ -1,5 +1,6 @@
 #include "stretchy_buffer.h"
 
+#include "assert.h"
 #include "memory.h"
 
 array_header_t* array_header(void* ptr)
@@ -22,7 +23,7 @@ void* array_reserve_(mem_allocator_i* alloc,
 {
     if (!required)
     {
-        return;
+        return ptr;
     }
 
     if (!ptr)

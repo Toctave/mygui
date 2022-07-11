@@ -18,11 +18,9 @@ enum drag_drop_state_e
     DRAG_DROP_DROPPED,
 };
 
-struct
-{
-    mem_api* mem;
 
-    mem_stack_allocator_o* tmp_stack;
+static struct
+{
     platform_input_info_t* input;
     renderer_i* renderer;
 
@@ -32,8 +30,7 @@ struct
     uint64_t active_id;
     uint64_t hovered_id;
 
-    const void* drag_payload;
-    uint32_t drag_state;
+    /* array */ uint8_t* drag_payload;
 
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
@@ -56,8 +53,9 @@ struct
     uint32_t margin;
     uint32_t line_height;
 
-    quad_i32_t* current_node;
-    const char* current_node_name;
+    /* quad_i32_t* current_node_box; */
+    /* uint64_t current_node_id; */
+    /* uint32_t current_node_plug_count; */
 } ui;
 
 bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
@@ -203,12 +201,19 @@ bool handle_drag_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
     return handle_drag(x, y, w, h, &dx, dy) && *dy;
 }
 
-void start_drag_and_drop(const void* payload)
+bool try_start_drag_and_drop(const void* payload, uint32_t size)
 {
-    ASSERT(ui.drag_state == DRAG_DROP_NONE);
-
-    ui.drag_payload = payload;
-    ui.drag_state = DRAG_DROP_DRAGGING;
+    if (ui.drag_state == DRAG_DROP_NONE)
+    {
+        array_reserve(ui.alloc, ui.drag_payload, size);
+        memcpy(ui.drag_payload, payload, size);
+        ui.drag_state = DRAG_DROP_DRAGGING;
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 static void newline() { ui.cursor_y += ui.line_height + ui.margin; }
@@ -280,7 +285,8 @@ static bool slider(const char* txt, float* value, float min, float max)
             ui.colors.main);
     }
 
-    char* value_txt = tprintf(ui.mem, ui.tmp_stack, "%.3f", *value);
+    char value_txt[256];
+    snprintf(value_txt, "%.3f", *value);
 
     draw_text(value_txt, box_x, box_y);
 
@@ -364,14 +370,10 @@ bool checkbox(const char* txt, bool* value)
     return clicked;
 }
 
-static void init(mem_api* mem,
-                 mem_stack_allocator_o* tmp_stack,
-                 renderer_i* renderer,
-                 platform_input_info_t* input)
+static void
+init(mem_allocator_i* alloc, renderer_i* renderer, platform_input_info_t* input)
 {
-    ui.mem = mem;
-
-    ui.tmp_stack = tmp_stack;
+    ui.alloc = alloc;
     ui.renderer = renderer;
     ui.input = input;
 
@@ -397,15 +399,18 @@ static void terminate()
     // TODO(octave)
 }
 
-static void begin_node(const char* name, quad_i32_t* node)
+static void begin_node(const char* name, quad_i32_t* node, uint64_t id)
 {
-    ASSERT(!ui.current_node);
-    ASSERT(!ui.current_node_name);
+    ASSERT(!ui.current_node_id);
+    ASSERT(id);
 
-    ui.current_node = node;
-    ui.current_node_name = name;
+    ASSERT(!ui.current_node_box);
 
-    push_string_id(name);
+    ui.current_node_id = id;
+    ui.current_node_plug_count = 0;
+    ui.current_node_box = node;
+
+    push_id(id);
 
     int32_t x = node->min[0];
     int32_t y = node->min[1];
@@ -417,16 +422,17 @@ static void begin_node(const char* name, quad_i32_t* node)
                            (quad_i32_t){{x, y}, {width, ui.line_height}},
                            ui.colors.main);
 
-    draw_text(ui.current_node_name, x, y);
+    draw_text(name, x, y);
 
     begin_draw_region(x, y + ui.line_height);
 }
 
 static void end_node()
 {
-    ASSERT(ui.current_node);
+    ASSERT(ui.current_node_id);
+    ASSERT(ui.current_node_box);
 
-    quad_i32_t* node = ui.current_node;
+    quad_i32_t* node = ui.current_node_box;
 
     int32_t x = node->min[0];
     int32_t y = node->min[1];
@@ -464,8 +470,8 @@ static void end_node()
     end_draw_region();
 
     pop_id();
-    ui.current_node = 0;
-    ui.current_node_name = 0;
+    ui.current_node_box = 0;
+    ui.current_node_id = 0;
 }
 
 static void plug(const char* name)
@@ -527,7 +533,7 @@ static void begin()
     }
 }
 
-static void end()
+static void end_frame()
 {
     end_draw_region();
     ASSERT(ui.draw_region_stack_height == 0);
@@ -560,8 +566,8 @@ static void* load()
     ui_api.begin_node = begin_node;
     ui_api.end_node = end_node;
     ui_api.plug = plug;
-    ui_api.begin = begin;
-    ui_api.end = end;
+    ui_api.begin_frame = begin_frame;
+    ui_api.end_frame = end_frame;
 
     return &ui_api;
 }

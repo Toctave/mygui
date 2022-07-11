@@ -208,10 +208,7 @@ int main(int argc, const char** argv)
 
     platform_input_info_t input = {0};
 
-    ui->init(mem, tmp_alloc, renderer, &input);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    ui->init(mem->std, renderer, &input);
 
     float freq = 1.0f;
 
@@ -231,7 +228,7 @@ int main(int argc, const char** argv)
 
         platform_handle_input_events(&input);
 
-        ui->begin();
+        ui->begin_frame();
 
         if (ui->button("Do the thingy"))
         {
@@ -248,20 +245,25 @@ int main(int argc, const char** argv)
             log_debug("The thingy is %s", b ? "on" : "off");
         }
 
-        ui->begin_node("my node", &node);
-        ui->plug("The value");
-        ui->plug("The other value");
+        ui->begin_node("my node", &node, 1);
+        if (ui->plug("The value", 0, &input_id))
+        {
+            log_debug("DRAGURU %lu %lu", input_id.node, input_id.plug);
+        }
         ui->end_node();
 
-        ui->begin_node("my other node", &node2);
-        ui->plug("amazing value");
+        ui->begin_node("my other node", &node2, 2);
+        if (ui->plug("amazing value", 0, &input_id))
+        {
+            log_debug("DRAAG %lu %lu", input_id.node, input_id.plug);
+        }
         ui->end_node();
 
         y = sinf(freq * t);
         ui->slider("freq", &freq, 0.0f, 10.0f);
         ui->slider("sin(freq * t)", &y, -1.0f, 1.0f);
 
-        ui->end();
+        ui->end_frame();
 
         renderer->do_draw(renderer, input.width, input.height);
         platform_swap_buffers();

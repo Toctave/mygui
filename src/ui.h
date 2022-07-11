@@ -2,15 +2,13 @@
 
 #include "base_types.h"
 
-typedef struct mem_api mem_api;
-typedef struct mem_stack_allocator_o mem_stack_allocator_o;
 typedef struct renderer_i renderer_i;
 typedef struct platform_input_info_t platform_input_info_t;
+typedef struct mem_allocator_i mem_allocator_i;
 
 typedef struct oui_api
 {
-    void (*init)(mem_api* mem,
-                 mem_stack_allocator_o* tmp_stack,
+    void (*init)(mem_allocator_i* alloc,
                  renderer_i* renderer,
                  platform_input_info_t* input);
     void (*terminate)();
@@ -31,6 +29,6 @@ typedef struct oui_api
     void (*plug)(const char* name);
     void (*end_node)();
 
-    void (*begin)();
-    void (*end)();
+    void (*begin_frame)();
+    void (*end_frame)();
 } oui_api;

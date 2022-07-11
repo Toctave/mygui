@@ -755,6 +755,9 @@ static void renderer_init(mem_api* mem,
                           mem_stack_allocator_o* tmp,
                           renderer_o* renderer)
 {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     glGenBuffers(1, &renderer->vbo);
     glGenBuffers(1, &renderer->ebo);
     glGenVertexArrays(1, &renderer->vao);

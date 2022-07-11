@@ -10,6 +10,7 @@
 
 #include "assert.h"
 #include "data_model.h"
+#include "evaluation_graph.h"
 #include "hash.h"
 #include "logging.h"
 #include "memory.h"
@@ -122,6 +123,50 @@ static void test_db()
     db->destroy(mydb);
 }
 
+void add_integer(const node_plug_value_t* inputs, node_plug_value_t* outputs)
+{
+    outputs[0].integer = inputs[0].integer + inputs[1].integer;
+    log_debug("%ld + %ld = %ld",
+              inputs[0].integer,
+              inputs[1].integer,
+              outputs[0].integer);
+}
+
+static void test_eval_graph()
+{
+    node_graph_t graph;
+    node_graph_init(mem->std, &graph);
+
+    node_type_definition_t node_add = {
+        .name = "add",
+        .input_count = 2,
+        .inputs = {{.name = "a", .type = PLUG_INTEGER},
+                   {.name = "b", .type = PLUG_INTEGER}},
+        .output_count = 1,
+        .outputs = {{.name = "result", .type = PLUG_INTEGER}},
+
+        .evaluate = add_integer,
+    };
+
+    uint32_t add_type = add_node_type(mem->std, &graph, node_add);
+
+    uint32_t f = add_node(mem->std, &graph, add_type);
+    uint32_t g = add_node(mem->std, &graph, add_type);
+
+    connect_nodes(&graph, f, 0, g, 0);
+    connect_nodes(&graph, f, 0, g, 0);
+    connect_nodes(&graph, g, 0, f, 1);
+
+    int64_t* x = &get_input_value(&graph, f, 0)->integer;
+    int64_t* y = &get_input_value(&graph, f, 1)->integer;
+    int64_t* z = &get_input_value(&graph, g, 1)->integer;
+
+    *x = 43;
+    *y = 25;
+    *z = 4;
+    log_debug("result = %ld", stupid_evaluate(&graph, g, 0).integer);
+}
+
 int main(int argc, const char** argv)
 {
     ASSERT(sizeof(void*) == sizeof(uint64_t));
@@ -149,6 +194,7 @@ int main(int argc, const char** argv)
 
     test_hash();
     test_db();
+    test_eval_graph();
 
     void* tmp_stack_buf = mem_alloc(mem->vm, Gibi(1024));
     mem_stack_allocator_o* tmp_alloc =

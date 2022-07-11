@@ -6,17 +6,18 @@ rm -r build/*
 common_flags="-g -O0"
 
 memory_sources="src/memory.c"
-exe_sources="\
-src/color.c \
-src/hash.c \
-src/logging.c \
-src/main.c \
-src/memory.c \
-src/platform_glx.c \
-src/platform_linux.c \
-src/plugin_manager.c \
-src/stretchy_buffer.c \
-src/util.c \
+exe_sources="
+src/color.c
+src/evaluation_graph.c
+src/hash.c
+src/logging.c
+src/main.c
+src/memory.c
+src/platform_glx.c
+src/platform_linux.c
+src/plugin_manager.c
+src/stretchy_buffer.c
+src/util.c
 "
 
 libs="-lGLX -lX11 -lGL -lm -ldl"
@@ -38,4 +39,3 @@ build_plugin "memory" "src/memory.c"
 build_plugin "database" "src/data_model.c"
 build_plugin "renderer" "src/renderer.c"
 build_plugin "ui" "src/ui.c"
-

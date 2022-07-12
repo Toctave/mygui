@@ -274,7 +274,12 @@ int main(int argc, const char** argv)
             for (uint32_t plug = 0; plug < type->input_count; plug++)
             {
                 ui_plug_id_t input_id = {0};
-                ui->plug(type->inputs[plug].name, &input_id);
+                ui->plug(type->inputs[plug].name, &input_id, false);
+            }
+            for (uint32_t plug = 0; plug < type->output_count; plug++)
+            {
+                ui_plug_id_t input_id = {0};
+                ui->plug(type->outputs[plug].name, &input_id, true);
             }
 
             ui->end_node();

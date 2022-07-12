@@ -447,6 +447,64 @@ static void begin_node(const char* name)
     begin_draw_region(x, y + ui.line_height);
 }
 
+static bool plug(const char* name, ui_plug_id_t* source_plug, bool output)
+{
+    uint64_t current_node_id = current_id();
+    push_id(ui.current_node_plug_count);
+
+    bool result = false;
+    uint32_t draw_width = 10;
+    uint32_t hover_width = 30;
+    int32_t draw_x = ui.cursor_x - draw_width;
+    if (output)
+    {
+        draw_x += ui.current_node_box->extent[0];
+    }
+    int32_t draw_y = ui.cursor_y + ui.line_height / 2 - draw_width / 2;
+
+    int32_t hover_x = draw_x + draw_width / 2 - hover_width / 2;
+    int32_t hover_y = draw_y + draw_width / 2 - hover_width / 2;
+
+    draw_text(name, ui.cursor_x, ui.cursor_y);
+    newline();
+
+    ui.renderer->draw_quad(
+        ui.renderer,
+        (quad_i32_t){{draw_x, draw_y}, {draw_width, draw_width}},
+        color_rgb(0xFF, 0x00, 0x00));
+
+    handle_hold_and_release(hover_x, hover_y, hover_width, hover_width);
+
+    ui_plug_id_t plug_id = {
+        .node = current_node_id,
+        .plug = ui.current_node_plug_count++,
+    };
+
+    if (ui.active_id == current_id())
+    {
+        try_start_drag_and_drop(&plug_id, sizeof(plug_id));
+        int32_t cx = draw_x + draw_width / 2;
+        int32_t cy = draw_y + draw_width / 2;
+        ui.renderer->draw_line(ui.renderer,
+                               cx,
+                               cy,
+                               ui.input->mouse_x,
+                               ui.input->mouse_y,
+                               3.0f,
+                               color_rgb(0x00, 0x00, 0xff));
+    }
+    else if (ui.hovered_id == current_id()
+             && ui.drag_state == DRAG_DROP_DROPPED)
+    {
+        memcpy(source_plug, ui.drag_payload, sizeof(*source_plug));
+        result = true;
+    }
+
+    pop_id();
+
+    return result;
+}
+
 static void end_node()
 {
     ASSERT(ui.current_node_box);
@@ -490,61 +548,6 @@ static void end_node()
 
     pop_id();
     ui.current_node_box = 0;
-}
-
-static bool plug(const char* name, ui_plug_id_t* source_plug)
-{
-    uint64_t current_node_id = current_id();
-    push_id(ui.current_node_plug_count);
-
-    bool result = false;
-
-    uint32_t draw_width = 10;
-    uint32_t hover_width = 30;
-    int32_t draw_x = ui.cursor_x - draw_width;
-    int32_t draw_y = ui.cursor_y + ui.line_height / 2 - draw_width / 2;
-
-    int32_t hover_x = ui.cursor_x - draw_width / 2 - hover_width / 2;
-    int32_t hover_y = ui.cursor_y + ui.line_height / 2 - hover_width / 2;
-
-    ui.renderer->draw_quad(
-        ui.renderer,
-        (quad_i32_t){{draw_x, draw_y}, {draw_width, draw_width}},
-        color_rgb(0xFF, 0x00, 0x00));
-
-    draw_text(name, ui.cursor_x, ui.cursor_y);
-    newline();
-
-    handle_hold_and_release(hover_x, hover_y, hover_width, hover_width);
-
-    ui_plug_id_t plug_id = {
-        .node = current_node_id,
-        .plug = ui.current_node_plug_count++,
-    };
-
-    if (ui.active_id == current_id())
-    {
-        try_start_drag_and_drop(&plug_id, sizeof(plug_id));
-        int32_t cx = draw_x + draw_width / 2;
-        int32_t cy = draw_y + draw_width / 2;
-        ui.renderer->draw_line(ui.renderer,
-                               cx,
-                               cy,
-                               ui.input->mouse_x,
-                               ui.input->mouse_y,
-                               3.0f,
-                               color_rgb(0x00, 0x00, 0xff));
-    }
-    else if (ui.hovered_id == current_id()
-             && ui.drag_state == DRAG_DROP_DROPPED)
-    {
-        memcpy(source_plug, ui.drag_payload, sizeof(*source_plug));
-        result = true;
-    }
-
-    pop_id();
-
-    return result;
 }
 
 static void begin_frame()

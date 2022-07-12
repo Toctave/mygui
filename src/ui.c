@@ -7,9 +7,12 @@
 #include "platform.h"
 #include "plugin_sdk.h"
 #include "renderer.h"
+#include "stretchy_buffer.h"
 #include "util.h"
 
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 enum drag_drop_state_e
 {
@@ -21,6 +24,7 @@ enum drag_drop_state_e
 
 static struct
 {
+    mem_allocator_i* alloc;
     platform_input_info_t* input;
     renderer_i* renderer;
 
@@ -30,6 +34,7 @@ static struct
     uint64_t active_id;
     uint64_t hovered_id;
 
+    uint32_t drag_state;
     /* array */ uint8_t* drag_payload;
 
     uint64_t id_stack[1024];
@@ -53,9 +58,9 @@ static struct
     uint32_t margin;
     uint32_t line_height;
 
-    /* quad_i32_t* current_node_box; */
-    /* uint64_t current_node_id; */
-    /* uint32_t current_node_plug_count; */
+    quad_i32_t* current_node_box;
+    uint64_t current_node_id;
+    uint32_t current_node_plug_count;
 } ui;
 
 bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
@@ -286,7 +291,7 @@ static bool slider(const char* txt, float* value, float min, float max)
     }
 
     char value_txt[256];
-    snprintf(value_txt, "%.3f", *value);
+    snprintf(value_txt, sizeof(value_txt), "%.3f", *value);
 
     draw_text(value_txt, box_x, box_y);
 
@@ -474,10 +479,12 @@ static void end_node()
     ui.current_node_id = 0;
 }
 
-static void plug(const char* name)
+static bool plug(const char* name, ui_plug_id_t* source_plug)
 {
-    push_string_id(name);
-    ASSERT(ui.current_node);
+    push_id(ui.current_node_plug_count);
+
+    bool result = false;
+    ASSERT(ui.current_node_id);
 
     uint32_t draw_width = 10;
     uint32_t hover_width = 30;
@@ -497,12 +504,14 @@ static void plug(const char* name)
 
     handle_hold_and_release(hover_x, hover_y, hover_width, hover_width);
 
+    ui_plug_id_t plug_id = {
+        .node = ui.current_node_id,
+        .plug = ui.current_node_plug_count++,
+    };
+
     if (ui.active_id == current_id())
     {
-        if (ui.drag_state == DRAG_DROP_NONE)
-        {
-            start_drag_and_drop(name);
-        }
+        try_start_drag_and_drop(&plug_id, sizeof(plug_id));
         int32_t cx = draw_x + draw_width / 2;
         int32_t cy = draw_y + draw_width / 2;
         ui.renderer->draw_line(ui.renderer,
@@ -510,19 +519,22 @@ static void plug(const char* name)
                                cy,
                                ui.input->mouse_x,
                                ui.input->mouse_y,
-                               4.0f,
+                               3.0f,
                                color_rgb(0x00, 0x00, 0xff));
     }
     else if (ui.hovered_id == current_id()
              && ui.drag_state == DRAG_DROP_DROPPED)
     {
-        log_debug("Dropped '%s' onto '%s'", (const char*)ui.drag_payload, name);
+        memcpy(source_plug, ui.drag_payload, sizeof(*source_plug));
+        result = true;
     }
 
     pop_id();
+
+    return result;
 }
 
-static void begin()
+static void begin_frame()
 {
     begin_draw_region(0, 0);
     ui.hovered_id = 0;
@@ -551,23 +563,22 @@ static void* load()
 {
     static oui_api ui_api;
 
-    ui_api.init = init;
-    ui_api.terminate = terminate;
-    ui_api.push_id = push_id;
-    ui_api.push_string_id = push_string_id;
-    ui_api.pop_id = pop_id;
-    ui_api.current_id = current_id;
-    ui_api.push_id = push_id;
     ui_api.begin_draw_region = begin_draw_region;
-    ui_api.end_draw_region = end_draw_region;
-    ui_api.slider = slider;
+    ui_api.begin_frame = begin_frame;
+    ui_api.begin_node = begin_node;
     ui_api.button = button;
     ui_api.checkbox = checkbox;
-    ui_api.begin_node = begin_node;
-    ui_api.end_node = end_node;
-    ui_api.plug = plug;
-    ui_api.begin_frame = begin_frame;
+    ui_api.current_id = current_id;
+    ui_api.end_draw_region = end_draw_region;
     ui_api.end_frame = end_frame;
+    ui_api.end_node = end_node;
+    ui_api.init = init;
+    ui_api.plug = plug;
+    ui_api.pop_id = pop_id;
+    ui_api.push_id = push_id;
+    ui_api.push_string_id = push_string_id;
+    ui_api.slider = slider;
+    ui_api.terminate = terminate;
 
     return &ui_api;
 }

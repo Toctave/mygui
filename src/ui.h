@@ -31,7 +31,7 @@ typedef struct oui_api
     bool (*button)(const char* txt);
     bool (*checkbox)(const char* txt, bool* value);
 
-    void (*begin_node)(const char* name, quad_i32_t* node, uint64_t id);
+    void (*begin_node)(const char* name);
     bool (*plug)(const char* name, ui_plug_id_t* source_plug);
     void (*end_node)();
 

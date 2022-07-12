@@ -21,7 +21,6 @@ enum drag_drop_state_e
     DRAG_DROP_DROPPED,
 };
 
-
 static struct
 {
     mem_allocator_i* alloc;
@@ -39,6 +38,12 @@ static struct
 
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
+
+    /* array */ quad_i32_t* node_boxes;
+
+    uint64_t node_hash_keys[1024];
+    uint64_t node_hash_values[1024];
+    hash_t node_hash;
 
     int32_t draw_region_stack[1024][2];
     uint32_t draw_region_stack_height;
@@ -59,7 +64,6 @@ static struct
     uint32_t line_height;
 
     quad_i32_t* current_node_box;
-    uint64_t current_node_id;
     uint32_t current_node_plug_count;
 } ui;
 
@@ -382,15 +386,21 @@ init(mem_allocator_i* alloc, renderer_i* renderer, platform_input_info_t* input)
     ui.renderer = renderer;
     ui.input = input;
 
-    ui.colors.main = color_gray(0x60);
-    ui.colors.secondary = color_gray(0x30);
-    ui.colors.background = color_gray(0x10);
+    ui.node_hash.bucket_count = STATIC_ARRAY_COUNT(ui.node_hash_keys);
+    ui.node_hash.keys = ui.node_hash_keys;
+    ui.node_hash.values = ui.node_hash_values;
 
-    ui.colors.text = color_gray(0xFF);
-    ui.colors.text_shadow = color_gray(0x00);
+    {
+        ui.colors.main = color_gray(0x60);
+        ui.colors.secondary = color_gray(0x30);
+        ui.colors.background = color_gray(0x10);
 
-    ui.colors.hover_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
-    ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
+        ui.colors.text = color_gray(0xFF);
+        ui.colors.text_shadow = color_gray(0x00);
+
+        ui.colors.hover_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
+        ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
+    }
 
     ui.padding = 6;
     ui.line_height = ui.renderer->get_font_height(ui.renderer) + 2 * ui.padding;
@@ -404,25 +414,30 @@ static void terminate()
     // TODO(octave)
 }
 
-static void begin_node(const char* name, quad_i32_t* node, uint64_t id)
+static void begin_node(const char* name)
 {
-    ASSERT(!ui.current_node_id);
-    ASSERT(id);
-
     ASSERT(!ui.current_node_box);
 
-    ui.current_node_id = id;
+    push_string_id(name);
+
+    uint64_t node_index = hash_find(&ui.node_hash, current_id(), UINT64_MAX);
+    if (node_index == UINT64_MAX)
+    {
+        array_push(ui.alloc,
+                   ui.node_boxes,
+                   ((quad_i32_t){{10, 10}, {200, 200}}));
+        node_index = array_count(ui.node_boxes) - 1;
+        hash_insert(&ui.node_hash, current_id(), node_index);
+    }
+
     ui.current_node_plug_count = 0;
-    ui.current_node_box = node;
+    quad_i32_t* box = ui.current_node_box = &ui.node_boxes[node_index];
 
-    push_id(id);
+    int32_t x = box->min[0];
+    int32_t y = box->min[1];
+    uint32_t width = box->extent[0];
 
-    int32_t x = node->min[0];
-    int32_t y = node->min[1];
-    uint32_t width = node->extent[0];
-    /* uint32_t height = node->extent.height; */
-
-    ui.renderer->draw_quad(ui.renderer, *node, ui.colors.background);
+    ui.renderer->draw_quad(ui.renderer, *box, ui.colors.background);
     ui.renderer->draw_quad(ui.renderer,
                            (quad_i32_t){{x, y}, {width, ui.line_height}},
                            ui.colors.main);
@@ -434,7 +449,6 @@ static void begin_node(const char* name, quad_i32_t* node, uint64_t id)
 
 static void end_node()
 {
-    ASSERT(ui.current_node_id);
     ASSERT(ui.current_node_box);
 
     quad_i32_t* node = ui.current_node_box;
@@ -476,15 +490,14 @@ static void end_node()
 
     pop_id();
     ui.current_node_box = 0;
-    ui.current_node_id = 0;
 }
 
 static bool plug(const char* name, ui_plug_id_t* source_plug)
 {
+    uint64_t current_node_id = current_id();
     push_id(ui.current_node_plug_count);
 
     bool result = false;
-    ASSERT(ui.current_node_id);
 
     uint32_t draw_width = 10;
     uint32_t hover_width = 30;
@@ -505,7 +518,7 @@ static bool plug(const char* name, ui_plug_id_t* source_plug)
     handle_hold_and_release(hover_x, hover_y, hover_width, hover_width);
 
     ui_plug_id_t plug_id = {
-        .node = ui.current_node_id,
+        .node = current_node_id,
         .plug = ui.current_node_plug_count++,
     };
 

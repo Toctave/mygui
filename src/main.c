@@ -17,6 +17,7 @@
 #include "platform.h"
 #include "plugin_manager.h"
 #include "renderer.h"
+#include "stretchy_buffer.h"
 #include "ui.h"
 #include "util.h"
 
@@ -214,8 +215,25 @@ int main(int argc, const char** argv)
 
     uint64_t t0 = platform_get_nanoseconds();
 
-    quad_i32_t node = {{10, 200}, {200, 200}};
-    quad_i32_t node2 = {{220, 200}, {200, 200}};
+    node_graph_t graph;
+    {
+        node_graph_init(mem->std, &graph);
+
+        node_type_definition_t node_add = {
+            .name = "add",
+            .input_count = 2,
+            .inputs = {{.name = "a", .type = PLUG_INTEGER},
+                       {.name = "b", .type = PLUG_INTEGER}},
+            .output_count = 1,
+            .outputs = {{.name = "result", .type = PLUG_INTEGER}},
+
+            .evaluate = add_integer,
+        };
+
+        uint32_t add_type = add_node_type(mem->std, &graph, node_add);
+        add_node(mem->std, &graph, add_type);
+        add_node(mem->std, &graph, add_type);
+    }
 
     // main loop
     while (!input.should_exit)
@@ -245,19 +263,23 @@ int main(int argc, const char** argv)
             log_debug("The thingy is %s", b ? "on" : "off");
         }
 
-        ui->begin_node("my node", &node, 1);
-        if (ui->plug("The value", 0, &input_id))
+        for (uint32_t node = 1; node < array_count(graph.nodes); node++)
         {
-            log_debug("DRAGURU %lu %lu", input_id.node, input_id.plug);
-        }
-        ui->end_node();
+            node_type_definition_t* type =
+                &graph.node_types[graph.nodes[node].type];
 
-        ui->begin_node("my other node", &node2, 2);
-        if (ui->plug("amazing value", 0, &input_id))
-        {
-            log_debug("DRAAG %lu %lu", input_id.node, input_id.plug);
+            ui->push_id(node);
+            ui->begin_node(type->name);
+
+            for (uint32_t plug = 0; plug < type->input_count; plug++)
+            {
+                ui_plug_id_t input_id = {0};
+                ui->plug(type->inputs[plug].name, &input_id);
+            }
+
+            ui->end_node();
+            ui->pop_id();
         }
-        ui->end_node();
 
         y = sinf(freq * t);
         ui->slider("freq", &freq, 0.0f, 10.0f);

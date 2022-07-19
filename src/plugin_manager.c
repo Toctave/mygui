@@ -24,6 +24,8 @@ typedef union plugin_slot_t
 } plugin_slot_t;
 
 static plugin_slot_t plugin_table[1024];
+static uint8_t api_memory[Mebi(32)];
+static uint32_t api_memory_used = 0;
 
 void plugin_manager_init()
 {
@@ -124,7 +126,12 @@ void* load_plugin(const char* name, version_t version)
     else if (!found->api)
     {
         ASSERT(found->spec.load);
-        found->api = found->spec.load();
+        ASSERT(api_memory_used + found->spec.api_size <= sizeof(api_memory));
+
+        found->api = &api_memory[api_memory_used];
+        api_memory_used += found->spec.api_size;
+
+        found->spec.load(found->api);
     }
 
     return found->api;

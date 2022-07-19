@@ -17,8 +17,8 @@ typedef struct mem_allocator_i
 
 typedef struct mem_api
 {
-    mem_allocator_i* std; // C standard lib allocator
-    mem_allocator_i* vm;  // Virtual Memory allocator
+    mem_allocator_i std; // C standard lib allocator
+    mem_allocator_i vm;  // Virtual Memory allocator
 
     mem_stack_allocator_o* (*stack_create)(void* buffer, uint64_t size);
     void (*stack_destroy)(mem_stack_allocator_o* stack);

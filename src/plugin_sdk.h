@@ -13,6 +13,7 @@ typedef struct plugin_spec_t
 {
     char name[MAX_PLUGIN_NAME_SIZE];
     version_t version;
-    void* (*load)();
-    void (*unload)();
+    uint32_t api_size;
+    void (*load)(void* api_buffer); // api_buffer must be at least
+                                    // api_size bytes large
 } plugin_spec_t;

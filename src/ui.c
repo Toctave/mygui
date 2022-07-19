@@ -632,33 +632,31 @@ static void end_frame()
     }
 }
 
-static void* load()
+static void load(void* api)
 {
-    static oui_api ui_api;
+    oui_api* ui_api = api;
 
-    ui_api.begin_draw_region = begin_draw_region;
-    ui_api.begin_frame = begin_frame;
-    ui_api.begin_node = begin_node;
-    ui_api.button = button;
-    ui_api.checkbox = checkbox;
-    ui_api.current_id = current_id;
-    ui_api.end_draw_region = end_draw_region;
-    ui_api.end_frame = end_frame;
-    ui_api.end_node = end_node;
-    ui_api.init = init;
-    ui_api.plug = plug;
-    ui_api.pop_id = pop_id;
-    ui_api.push_id = push_id;
-    ui_api.push_string_id = push_string_id;
-    ui_api.slider = slider;
-    ui_api.terminate = terminate;
-
-    return &ui_api;
+    ui_api->begin_draw_region = begin_draw_region;
+    ui_api->begin_frame = begin_frame;
+    ui_api->begin_node = begin_node;
+    ui_api->button = button;
+    ui_api->checkbox = checkbox;
+    ui_api->current_id = current_id;
+    ui_api->end_draw_region = end_draw_region;
+    ui_api->end_frame = end_frame;
+    ui_api->end_node = end_node;
+    ui_api->init = init;
+    ui_api->plug = plug;
+    ui_api->pop_id = pop_id;
+    ui_api->push_id = push_id;
+    ui_api->push_string_id = push_string_id;
+    ui_api->slider = slider;
+    ui_api->terminate = terminate;
 }
 
 plugin_spec_t PLUGIN_SPEC = {
     .name = "oui",
     .version = {1, 0, 0},
     .load = load,
-    .unload = 0,
+    .api_size = sizeof(oui_api),
 };

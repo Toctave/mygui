@@ -118,30 +118,24 @@ static void* stack_push(mem_stack_allocator_o* alloc, uint64_t size)
     return result;
 }
 
-static void* load()
+static void load(void* api_buffer)
 {
-    static mem_api mem;
-    static mem_allocator_i std;
-    static mem_allocator_i vm;
+    mem_api* mem = api_buffer;
+    *mem = (mem_api){0};
 
-    std.realloc = std_realloc;
-    vm.realloc = vm_realloc;
+    mem->std.realloc = std_realloc;
+    mem->vm.realloc = vm_realloc;
 
-    mem.std = &std;
-    mem.vm = &vm;
-
-    mem.stack_create = stack_create;
-    mem.stack_destroy = stack_destroy;
-    mem.stack_get_cursor = stack_get_cursor;
-    mem.stack_revert = stack_revert;
-    mem.stack_push = stack_push;
-
-    return &mem;
+    mem->stack_create = stack_create;
+    mem->stack_destroy = stack_destroy;
+    mem->stack_get_cursor = stack_get_cursor;
+    mem->stack_revert = stack_revert;
+    mem->stack_push = stack_push;
 }
 
 plugin_spec_t PLUGIN_SPEC = {
     .name = "memory",
     .version = {1, 0, 0},
     .load = load,
-    .unload = 0,
+    .api_size = sizeof(mem_api),
 };

@@ -1054,19 +1054,17 @@ static renderer_i* create(mem_api* mem,
     return result;
 }
 
-static void* load()
+static void load(void* api)
 {
-    static renderer_api api = {0};
+    renderer_api* rdr = api;
 
-    api.create = create;
-    api.destroy = 0;
-
-    return &api;
+    rdr->create = create;
+    rdr->destroy = 0;
 }
 
 plugin_spec_t PLUGIN_SPEC = {
     .name = "renderer",
     .version = {0, 0, 1},
     .load = load,
-    .unload = 0,
+    .api_size = sizeof(renderer_api),
 };

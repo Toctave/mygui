@@ -74,7 +74,7 @@ typedef struct blob_t
 
 static void test_db()
 {
-    database_o* mydb = db->create(mem->vm);
+    database_o* mydb = db->create(&mem->vm);
 
     property_definition_t props[] = {
         {.name = "active", .type = PTYPE_BOOL},
@@ -136,7 +136,7 @@ void add_integer(const node_plug_value_t* inputs, node_plug_value_t* outputs)
 static void test_eval_graph()
 {
     node_graph_t graph;
-    node_graph_init(mem->std, &graph);
+    node_graph_init(&mem->std, &graph);
 
     node_type_definition_t node_add = {
         .name = "add",
@@ -149,10 +149,10 @@ static void test_eval_graph()
         .evaluate = add_integer,
     };
 
-    uint32_t add_type = add_node_type(mem->std, &graph, node_add);
+    uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
 
-    uint32_t f = add_node(mem->std, &graph, add_type);
-    uint32_t g = add_node(mem->std, &graph, add_type);
+    uint32_t f = add_node(&mem->std, &graph, add_type);
+    uint32_t g = add_node(&mem->std, &graph, add_type);
 
     connect_nodes(&graph, f, 0, g, 0);
     connect_nodes(&graph, f, 0, g, 0);
@@ -191,17 +191,17 @@ int main(int argc, const char** argv)
     ui = load_plugin("ui", (version_t){0, 0, 1});
     ASSERT(ui);
 
-    log_init(mem->vm);
+    log_init(&mem->vm);
 
     test_hash();
     test_db();
     test_eval_graph();
 
-    void* tmp_stack_buf = mem_alloc(mem->vm, Gibi(1024));
+    void* tmp_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
     mem_stack_allocator_o* tmp_alloc =
         mem->stack_create(tmp_stack_buf, Gibi(1024));
 
-    void* permanent_stack_buf = mem_alloc(mem->vm, Gibi(1024));
+    void* permanent_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
     mem_stack_allocator_o* permanent_alloc =
         mem->stack_create(permanent_stack_buf, Gibi(1024));
 
@@ -209,7 +209,7 @@ int main(int argc, const char** argv)
 
     platform_input_info_t input = {0};
 
-    ui->init(mem->std, renderer, &input);
+    ui->init(&mem->std, renderer, &input);
 
     float freq = 1.0f;
 
@@ -217,7 +217,7 @@ int main(int argc, const char** argv)
 
     node_graph_t graph;
     {
-        node_graph_init(mem->std, &graph);
+        node_graph_init(&mem->std, &graph);
 
         node_type_definition_t node_add = {
             .name = "add",
@@ -230,9 +230,9 @@ int main(int argc, const char** argv)
             .evaluate = add_integer,
         };
 
-        uint32_t add_type = add_node_type(mem->std, &graph, node_add);
-        add_node(mem->std, &graph, add_type);
-        add_node(mem->std, &graph, add_type);
+        uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
+        add_node(&mem->std, &graph, add_type);
+        add_node(&mem->std, &graph, add_type);
     }
 
     uint64_t watched = platform_watch_file("/tmp/test");

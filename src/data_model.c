@@ -453,32 +453,30 @@ static object_id_t add_object(database_o* db, uint16_t type_index)
     return object->id;
 }
 
-static void* load()
+static void load(void* api)
 {
-    static database_api db;
+    database_api* db = api;
 
-    db.create = create;
-    db.destroy = destroy;
-    db.add_object_type = add_object_type;
-    db.add_object = add_object;
-    db.delete_object = delete_object;
-    db.get_float = get_float;
-    db.set_float = set_float;
-    db.get_int = get_int;
-    db.set_int = set_int;
-    db.get_sub_object = get_sub_object;
-    db.get_reference = get_reference;
-    db.set_reference = set_reference;
-    db.reallocate_buffer = reallocate_buffer;
-    db.get_buffer_data = get_buffer_data;
-    db.set_buffer_data = set_buffer_data;
-
-    return &db;
+    db->create = create;
+    db->destroy = destroy;
+    db->add_object_type = add_object_type;
+    db->add_object = add_object;
+    db->delete_object = delete_object;
+    db->get_float = get_float;
+    db->set_float = set_float;
+    db->get_int = get_int;
+    db->set_int = set_int;
+    db->get_sub_object = get_sub_object;
+    db->get_reference = get_reference;
+    db->set_reference = set_reference;
+    db->reallocate_buffer = reallocate_buffer;
+    db->get_buffer_data = get_buffer_data;
+    db->set_buffer_data = set_buffer_data;
 }
 
 plugin_spec_t PLUGIN_SPEC = {
     .name = "database",
     .version = {0, 0, 1},
     .load = load,
-    .unload = 0,
+    .api_size = sizeof(database_api),
 };

@@ -3,8 +3,8 @@
 #include <inttypes.h>
 
 typedef int32_t bool;
-static const bool true = 1;
-static const bool false = 0;
+#define true 1
+#define false 0
 
 typedef struct quad_i32_t
 {

@@ -21,12 +21,6 @@ enum drag_drop_state_e
     DRAG_DROP_DROPPED,
 };
 
-typedef struct ui_plug_id_t
-{
-    uint64_t node;
-    uint64_t plug;
-} ui_plug_id_t;
-
 static struct
 {
     mem_allocator_i* alloc;
@@ -40,16 +34,11 @@ static struct
     uint64_t hovered_id;
 
     uint32_t drag_state;
+    uint64_t drag_source_id;
     /* array */ uint8_t* drag_payload;
 
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
-
-    /* array */ quad_i32_t* node_boxes;
-
-    uint64_t node_hash_keys[1024];
-    uint64_t node_hash_values[1024];
-    hash_t node_hash;
 
     int32_t draw_region_stack[1024][2];
     uint32_t draw_region_stack_height;
@@ -68,16 +57,10 @@ static struct
     uint32_t padding;
     uint32_t margin;
     uint32_t line_height;
-
-    quad_i32_t* current_node_box;
-    uint32_t current_node_plug_count;
-
-    bool connection_happened_this_frame;
-    bool connection_needs_handling;
-    ui_plug_id_t connection[2];
 } ui;
 
-bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
+static bool
+mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
 {
     return ui.input->mouse_x >= x && ui.input->mouse_x < x + width //
            && ui.input->mouse_y >= y && ui.input->mouse_y < y + height;
@@ -132,7 +115,7 @@ static void end_draw_region()
     ui.cursor_y = (*cursor)[1];
 }
 
-float clamped_float(float t, float min, float max)
+static float clamped_float(float t, float min, float max)
 {
     if (t < min)
     {
@@ -148,7 +131,7 @@ float clamped_float(float t, float min, float max)
     }
 }
 
-bool handle_hover(int32_t x, int32_t y, uint32_t w, uint32_t h)
+static bool hover_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
 {
     bool is_inside = mouse_inside_region(x, y, w, h);
 
@@ -166,9 +149,9 @@ bool handle_hover(int32_t x, int32_t y, uint32_t w, uint32_t h)
     return ui.hovered_id == current_id();
 }
 
-bool handle_hold_and_release(int32_t x, int32_t y, uint32_t w, uint32_t h)
+static bool hold_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
 {
-    bool hovered = handle_hover(x, y, w, h);
+    bool hovered = hover_rect(x, y, w, h);
 
     if (hovered && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT)
         && !ui.active_id)
@@ -188,14 +171,14 @@ bool handle_hold_and_release(int32_t x, int32_t y, uint32_t w, uint32_t h)
     }
 }
 
-bool handle_drag(int32_t x,
-                 int32_t y,
-                 uint32_t w,
-                 uint32_t h,
-                 int32_t* dx,
-                 int32_t* dy)
+static bool drag_rect(int32_t x,
+                      int32_t y,
+                      uint32_t w,
+                      uint32_t h,
+                      int32_t* dx,
+                      int32_t* dy)
 {
-    handle_hold_and_release(x, y, w, h);
+    hold_rect(x, y, w, h);
 
     if (ui.active_id == current_id())
     {
@@ -208,25 +191,41 @@ bool handle_drag(int32_t x,
     return false;
 }
 
-bool handle_drag_x(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dx)
+static bool
+drag_rect_x(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dx)
 {
     int32_t dy;
-    return handle_drag(x, y, w, h, dx, &dy) && *dx;
+    return drag_rect(x, y, w, h, dx, &dy) && *dx;
 }
 
-bool handle_drag_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
+static bool
+drag_rect_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
 {
     int32_t dx;
-    return handle_drag(x, y, w, h, &dx, dy) && *dy;
+    return drag_rect(x, y, w, h, &dx, dy) && *dy;
 }
 
-bool try_start_drag_and_drop(const void* payload, uint32_t size)
+static bool drag_and_drop_source(const void* payload, uint32_t size)
 {
-    if (ui.drag_state == DRAG_DROP_NONE)
+    if (current_id() == ui.hovered_id
+        && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT)
+        && ui.drag_state == DRAG_DROP_NONE)
     {
         array_reserve(ui.alloc, ui.drag_payload, size);
         memcpy(ui.drag_payload, payload, size);
+
+        ui.drag_source_id = current_id();
         ui.drag_state = DRAG_DROP_DRAGGING;
+    }
+    return ui.drag_source_id == current_id()
+           && ui.drag_state == DRAG_DROP_DRAGGING;
+}
+
+static bool drag_and_drop_target(void* payload, uint32_t size)
+{
+    if (ui.hovered_id == current_id() && ui.drag_state == DRAG_DROP_DROPPED)
+    {
+        memcpy(payload, ui.drag_payload, size);
         return true;
     }
     else
@@ -283,7 +282,7 @@ static bool slider(const char* txt, float* value, float min, float max)
     bool changed = false;
 
     int32_t dx;
-    if (handle_drag_x(box_x, box_y, box_width, box_height, &dx))
+    if (drag_rect_x(box_x, box_y, box_width, box_height, &dx))
     {
         *value += (float)dx / unitsToPixels;
         *value = clamped_float(*value, min, max);
@@ -318,7 +317,7 @@ static bool slider(const char* txt, float* value, float min, float max)
     return changed;
 }
 
-bool button(const char* txt)
+static bool button(const char* txt)
 {
     push_string_id(txt);
 
@@ -328,7 +327,7 @@ bool button(const char* txt)
     int32_t x = ui.cursor_x;
     int32_t y = ui.cursor_y;
 
-    bool result = handle_hold_and_release(x, y, width, height);
+    bool result = hold_rect(x, y, width, height);
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
     ui.renderer->draw_quad(ui.renderer, pos_quad, ui.colors.main);
@@ -344,28 +343,29 @@ bool button(const char* txt)
     return result;
 }
 
-quad_i32_t quad_i32_grown(quad_i32_t q, int32_t offset)
-{
-    return (quad_i32_t){
-        .min = {q.min[0] + offset, q.min[1] + offset},
-        .extent = {q.extent[0] - 2 * offset, q.extent[1] - 2 * offset}};
-}
-
-bool checkbox(const char* txt, bool* value)
+static bool checkbox(const char* txt, bool* value)
 {
     push_string_id(txt);
 
-    /* int32_t width = */
-    /* ui.renderer->font.bbox.extent[0] * strlen(txt) + 2 * ui.padding; */
     int32_t width = ui.line_height;
     int32_t height = ui.line_height;
     int32_t x = ui.cursor_x;
     int32_t y = ui.cursor_y;
 
-    bool clicked = handle_hold_and_release(x, y, width, height);
+    bool clicked = hold_rect(x, y, width, height);
     if (clicked)
     {
         *value = !*value;
+    }
+
+    if (drag_and_drop_source(0, 0))
+    {
+        log_debug("Dragging from checkbox");
+    }
+
+    if (drag_and_drop_target(0, 0))
+    {
+        log_debug("Dropped on checkbox");
     }
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
@@ -378,7 +378,7 @@ bool checkbox(const char* txt, bool* value)
                                ui.colors.main);
     }
 
-    /* draw_text(txt, x, y); */
+    draw_text(txt, x + width, y);
 
     draw_hover_and_active_overlay(x, y, width, height);
 
@@ -395,10 +395,6 @@ init(mem_allocator_i* alloc, renderer_i* renderer, platform_input_info_t* input)
     ui.alloc = alloc;
     ui.renderer = renderer;
     ui.input = input;
-
-    ui.node_hash.bucket_count = STATIC_ARRAY_COUNT(ui.node_hash_keys);
-    ui.node_hash.keys = ui.node_hash_keys;
-    ui.node_hash.values = ui.node_hash_values;
 
     {
         ui.colors.main = color_gray(0x60);
@@ -423,6 +419,14 @@ static void terminate()
 {
     // TODO(octave)
 }
+
+#if 0
+
+typedef struct ui_plug_id_t
+{
+    uint64_t node;
+    uint64_t plug;
+} ui_plug_id_t;
 
 static void begin_node(const char* name)
 {
@@ -457,20 +461,7 @@ static void begin_node(const char* name)
     begin_draw_region(x, y + ui.line_height);
 }
 
-static bool end_drag_and_drop(void* payload, uint32_t size)
-{
-    if (ui.hovered_id == current_id() && ui.drag_state == DRAG_DROP_DROPPED)
-    {
-        memcpy(payload, ui.drag_payload, size);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-bool plug_id_equals(ui_plug_id_t id1, ui_plug_id_t id2)
+static bool plug_id_equals(ui_plug_id_t id1, ui_plug_id_t id2)
 {
     return id1.node == id2.node && id1.plug == id2.plug;
 }
@@ -510,7 +501,7 @@ static uint32_t plug(const char* name, bool output)
     ui_plug_id_t source_plug;
     if (ui.active_id == current_id())
     {
-        try_start_drag_and_drop(&plug_id, sizeof(plug_id));
+        drag_and_drop_source(&plug_id, sizeof(plug_id));
         int32_t cx = draw_x + draw_width / 2;
         int32_t cy = draw_y + draw_width / 2;
         ui.renderer->draw_line(ui.renderer,
@@ -521,7 +512,7 @@ static uint32_t plug(const char* name, bool output)
                                3.0f,
                                color_rgb(0x00, 0x00, 0xff));
     }
-    else if (end_drag_and_drop(&source_plug, sizeof(source_plug))
+    else if (drag_and_drop_target(&source_plug, sizeof(source_plug))
              && !plug_id_equals(plug_id, source_plug))
     {
         ui.connection_happened_this_frame = true;
@@ -597,6 +588,8 @@ static void end_node()
     ui.current_node_box = 0;
 }
 
+#endif
+
 static void begin_frame()
 {
     begin_draw_region(0, 0);
@@ -612,23 +605,13 @@ static void end_frame()
 {
     end_draw_region();
     ASSERT(ui.draw_region_stack_height == 0);
-
     ASSERT(ui.id_stack_height == 1);
 
     if (ui.drag_state == DRAG_DROP_DROPPED)
     {
         ui.drag_state = DRAG_DROP_NONE;
+        ui.drag_source_id = 0;
         ui.drag_payload = 0;
-    }
-
-    if (ui.connection_happened_this_frame)
-    {
-        ui.connection_happened_this_frame = false;
-        ui.connection_needs_handling = true;
-    }
-    else if (ui.connection_needs_handling)
-    {
-        ui.connection_needs_handling = false;
     }
 }
 
@@ -641,8 +624,10 @@ static void load(void* api)
     ui_api->button = button;
     ui_api->checkbox = checkbox;
     ui_api->current_id = current_id;
-    ui_api->end_draw_region = end_draw_region;
+    ui_api->drag_and_drop_source = drag_and_drop_source;
+    ui_api->drag_and_drop_target = drag_and_drop_target;
     ui_api->end_frame = end_frame;
+    ui_api->hover_rect = hover_rect;
     ui_api->init = init;
     ui_api->pop_id = pop_id;
     ui_api->push_id = push_id;

@@ -50,7 +50,18 @@ uint64_t platform_read_file(platform_file_o* file, void* buffer, uint64_t size);
 
 uint64_t platform_get_nanoseconds();
 
+void platform_get_shared_library_path(char* path,
+                                      uint32_t size,
+                                      const char* name);
 void* platform_open_shared_library(const char* path);
 void platform_close_shared_library(void* lib);
 
 void* platform_get_symbol_address(void* lib, const char* name);
+
+typedef struct platform_file_event_t
+{
+    uint64_t watch_id;
+} platform_file_event_t;
+
+uint64_t platform_watch_file(const char* path);
+bool platform_poll_file_event(platform_file_event_t* event);

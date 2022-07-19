@@ -235,9 +235,16 @@ int main(int argc, const char** argv)
         add_node(mem->std, &graph, add_type);
     }
 
+    uint64_t watched = platform_watch_file("/tmp/test");
+
     // main loop
     while (!input.should_exit)
     {
+        platform_file_event_t file_event;
+        while (platform_poll_file_event(&file_event))
+        {
+        }
+
         mem->stack_revert(tmp_alloc, 0);
         uint64_t now = platform_get_nanoseconds();
 
@@ -263,6 +270,7 @@ int main(int argc, const char** argv)
             log_debug("The thingy is %s", b ? "on" : "off");
         }
 
+        uint32_t src_node = 0, src_plug = 0, dst_node = 0, dst_plug = 0;
         for (uint32_t node = 1; node < array_count(graph.nodes); node++)
         {
             node_type_definition_t* type =
@@ -273,17 +281,43 @@ int main(int argc, const char** argv)
 
             for (uint32_t plug = 0; plug < type->input_count; plug++)
             {
-                ui_plug_id_t input_id = {0};
-                ui->plug(type->inputs[plug].name, &input_id, false);
+                uint32_t plug_status = ui->plug(type->inputs[plug].name, false);
+
+                if (plug_status)
+                {
+                    log_debug("t = %lu, node %u, input %u : %u",
+                              now,
+                              node,
+                              plug,
+                              plug_status);
+                    dst_node = node;
+                    dst_plug = plug;
+                }
             }
             for (uint32_t plug = 0; plug < type->output_count; plug++)
             {
-                ui_plug_id_t input_id = {0};
-                ui->plug(type->outputs[plug].name, &input_id, true);
+                uint32_t plug_status = ui->plug(type->outputs[plug].name, true);
+                if (plug_status)
+                {
+                    log_debug("t = %lu, node %u, output %u : %u",
+                              now,
+                              node,
+                              plug,
+                              plug_status);
+                    src_node = node;
+                    src_plug = plug;
+                }
             }
 
             ui->end_node();
             ui->pop_id();
+        }
+
+        if (src_node && dst_node)
+        {
+            log_debug(
+                "Connection : %d",
+                connect_nodes(&graph, src_node, src_plug, dst_node, dst_plug));
         }
 
         y = sinf(freq * t);

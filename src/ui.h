@@ -6,11 +6,12 @@ typedef struct renderer_i renderer_i;
 typedef struct platform_input_info_t platform_input_info_t;
 typedef struct mem_allocator_i mem_allocator_i;
 
-typedef struct ui_plug_id_t
+enum plug_connection_event_e
 {
-    uint64_t node;
-    uint64_t plug;
-} ui_plug_id_t;
+    PLUG_CONNECTION_NONE,
+    PLUG_CONNECTION_SOURCE,
+    PLUG_CONNECTION_DESTINATION,
+};
 
 typedef struct oui_api
 {
@@ -32,7 +33,7 @@ typedef struct oui_api
     bool (*checkbox)(const char* txt, bool* value);
 
     void (*begin_node)(const char* name);
-    bool (*plug)(const char* name, ui_plug_id_t* source_plug, bool output);
+    uint32_t (*plug)(const char* name, bool output);
     void (*end_node)();
 
     void (*begin_frame)();

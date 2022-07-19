@@ -11,6 +11,9 @@ typedef struct plugin_t
     plugin_spec_t spec;
     void* api;
     void* lib;
+
+    uint64_t watch_id;
+    bool dirty;
 } plugin_t;
 
 typedef union plugin_slot_t
@@ -93,6 +96,10 @@ void* load_plugin(const char* name, version_t version)
 
             found->lib = lib;
             found->api = 0;
+
+            char lib_path[2048];
+            platform_get_shared_library_path(lib_path, sizeof(lib_path), name);
+            found->watch_id = platform_watch_file(lib_path);
 
             plugin_spec_t* spec =
                 platform_get_symbol_address(found->lib, "PLUGIN_SPEC");

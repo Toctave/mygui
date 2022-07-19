@@ -6,6 +6,8 @@
 
 #include <dlfcn.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <sys/inotify.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
 #include <sys/stat.h>
@@ -138,14 +140,17 @@ uint64_t platform_get_nanoseconds()
     return (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 }
 
+void platform_get_shared_library_path(char* path,
+                                      uint32_t size,
+                                      const char* name)
+{
+    snprintf(path, size, "%s/lib%s.so", EXECUTABLE_PATH, name);
+}
+
 void* platform_open_shared_library(const char* name)
 {
     char file_name[2048];
-    snprintf(file_name,
-             sizeof(file_name),
-             "%s/lib%s.so",
-             EXECUTABLE_PATH,
-             name);
+    platform_get_shared_library_path(file_name, sizeof(file_name), name);
     // TODO(octave) : check that the path isn't too long
 
     void* result = dlopen(file_name, RTLD_NOW | RTLD_GLOBAL);
@@ -164,4 +169,56 @@ void platform_close_shared_library(void* lib) { dlclose(lib); }
 void* platform_get_symbol_address(void* lib, const char* name)
 {
     return dlsym(lib, name);
+}
+
+static int inotify_instance()
+{
+    static int instance = -1;
+
+    if (instance < 0)
+    {
+        instance = inotify_init1(IN_NONBLOCK);
+        ASSERT(instance >= 0);
+    }
+
+    return instance;
+}
+
+uint64_t platform_watch_file(const char* path)
+{
+    int instance = inotify_instance();
+
+    int watch = inotify_add_watch(instance, path, IN_CLOSE_WRITE);
+    ASSERT(watch >= 0);
+
+    return watch;
+}
+
+bool platform_poll_file_event(platform_file_event_t* event)
+{
+    int instance = inotify_instance();
+
+    char buffer[sizeof(struct inotify_event) + NAME_MAX + 1];
+
+    ssize_t read_value = read(instance, buffer, sizeof(buffer));
+
+    if (read_value >= 0)
+    {
+        struct inotify_event* in_event = (struct inotify_event*)buffer;
+
+        event->watch_id = in_event->wd;
+
+        log_debug("Caught inotify event with wd = %d, mask = %u, name = %.*s",
+                  in_event->wd,
+                  in_event->mask,
+                  in_event->len,
+                  in_event->name);
+
+        return true;
+    }
+    else
+    {
+        ASSERT(errno == EAGAIN);
+        return false;
+    }
 }

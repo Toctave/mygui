@@ -21,6 +21,12 @@ enum drag_drop_state_e
     DRAG_DROP_DROPPED,
 };
 
+typedef struct ui_plug_id_t
+{
+    uint64_t node;
+    uint64_t plug;
+} ui_plug_id_t;
+
 static struct
 {
     mem_allocator_i* alloc;
@@ -65,6 +71,10 @@ static struct
 
     quad_i32_t* current_node_box;
     uint32_t current_node_plug_count;
+
+    bool connection_happened_this_frame;
+    bool connection_needs_handling;
+    ui_plug_id_t connection[2];
 } ui;
 
 bool mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
@@ -447,12 +457,29 @@ static void begin_node(const char* name)
     begin_draw_region(x, y + ui.line_height);
 }
 
-static bool plug(const char* name, ui_plug_id_t* source_plug, bool output)
+static bool end_drag_and_drop(void* payload, uint32_t size)
+{
+    if (ui.hovered_id == current_id() && ui.drag_state == DRAG_DROP_DROPPED)
+    {
+        memcpy(payload, ui.drag_payload, size);
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool plug_id_equals(ui_plug_id_t id1, ui_plug_id_t id2)
+{
+    return id1.node == id2.node && id1.plug == id2.plug;
+}
+
+static uint32_t plug(const char* name, bool output)
 {
     uint64_t current_node_id = current_id();
     push_id(ui.current_node_plug_count);
 
-    bool result = false;
     uint32_t draw_width = 10;
     uint32_t hover_width = 30;
     int32_t draw_x = ui.cursor_x - draw_width;
@@ -480,6 +507,7 @@ static bool plug(const char* name, ui_plug_id_t* source_plug, bool output)
         .plug = ui.current_node_plug_count++,
     };
 
+    ui_plug_id_t source_plug;
     if (ui.active_id == current_id())
     {
         try_start_drag_and_drop(&plug_id, sizeof(plug_id));
@@ -493,16 +521,35 @@ static bool plug(const char* name, ui_plug_id_t* source_plug, bool output)
                                3.0f,
                                color_rgb(0x00, 0x00, 0xff));
     }
-    else if (ui.hovered_id == current_id()
-             && ui.drag_state == DRAG_DROP_DROPPED)
+    else if (end_drag_and_drop(&source_plug, sizeof(source_plug))
+             && !plug_id_equals(plug_id, source_plug))
     {
-        memcpy(source_plug, ui.drag_payload, sizeof(*source_plug));
-        result = true;
+        ui.connection_happened_this_frame = true;
+        ui.connection[0] = source_plug;
+        ui.connection[1] = plug_id;
     }
 
     pop_id();
 
-    return result;
+    if (ui.connection_needs_handling)
+    {
+        if (plug_id_equals(plug_id, ui.connection[0]))
+        {
+            return PLUG_CONNECTION_SOURCE;
+        }
+        else if (plug_id_equals(plug_id, ui.connection[1]))
+        {
+            return PLUG_CONNECTION_DESTINATION;
+        }
+        else
+        {
+            return PLUG_CONNECTION_NONE;
+        }
+    }
+    else
+    {
+        return PLUG_CONNECTION_NONE;
+    }
 }
 
 static void end_node()
@@ -572,6 +619,16 @@ static void end_frame()
     {
         ui.drag_state = DRAG_DROP_NONE;
         ui.drag_payload = 0;
+    }
+
+    if (ui.connection_happened_this_frame)
+    {
+        ui.connection_happened_this_frame = false;
+        ui.connection_needs_handling = true;
+    }
+    else if (ui.connection_needs_handling)
+    {
+        ui.connection_needs_handling = false;
     }
 }
 

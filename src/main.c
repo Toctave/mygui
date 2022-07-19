@@ -164,6 +164,60 @@ static void test_eval_graph(mem_api* mem)
     log_debug("result = %ld", stupid_evaluate(&graph, g, 0).integer);
 }
 
+static void graph_ui(oui_api* ui, node_graph_t* graph)
+{
+    uint32_t src_node = 0, src_plug = 0, dst_node = 0, dst_plug = 0;
+    for (uint32_t node = 1; node < array_count(graph->nodes); node++)
+    {
+        node_type_definition_t* type =
+            &graph->node_types[graph->nodes[node].type];
+
+        ui->push_id(node);
+        /* ui->begin_node(type->name); */
+
+        for (uint32_t plug = 0; plug < type->input_count; plug++)
+        {
+            uint32_t plug_status = 0;
+            //ui->plug(type->inputs[plug].name, false);
+
+            if (plug_status)
+            {
+                log_debug("t = %lu, node %u, input %u : %u",
+                          platform_get_nanoseconds(),
+                          node,
+                          plug,
+                          plug_status);
+                dst_node = node;
+                dst_plug = plug;
+            }
+        }
+        for (uint32_t plug = 0; plug < type->output_count; plug++)
+        {
+            uint32_t plug_status = 0;
+            /* = ui->plug(type->outputs[plug].name, true); */
+            if (plug_status)
+            {
+                log_debug("t = %lu, node %u, output %u : %u",
+                          platform_get_nanoseconds(),
+                          node,
+                          plug,
+                          plug_status);
+                src_node = node;
+                src_plug = plug;
+            }
+        }
+
+        /* ui->end_node(); */
+        ui->pop_id();
+    }
+
+    if (src_node && dst_node)
+    {
+        log_debug("Connection : %d",
+                  connect_nodes(graph, src_node, src_plug, dst_node, dst_plug));
+    }
+}
+
 int main(int argc, const char** argv)
 {
     ASSERT(sizeof(void*) == sizeof(uint64_t));
@@ -251,6 +305,8 @@ int main(int argc, const char** argv)
 
         ui->begin_frame();
 
+        graph_ui(ui, &graph);
+
         if (ui->button("Do the thingy"))
         {
             log_debug("Did the thingy");
@@ -264,56 +320,6 @@ int main(int argc, const char** argv)
         if (ui->checkbox("Thingy on", &b))
         {
             log_debug("The thingy is %s", b ? "on" : "off");
-        }
-
-        uint32_t src_node = 0, src_plug = 0, dst_node = 0, dst_plug = 0;
-        for (uint32_t node = 1; node < array_count(graph.nodes); node++)
-        {
-            node_type_definition_t* type =
-                &graph.node_types[graph.nodes[node].type];
-
-            ui->push_id(node);
-            ui->begin_node(type->name);
-
-            for (uint32_t plug = 0; plug < type->input_count; plug++)
-            {
-                uint32_t plug_status = ui->plug(type->inputs[plug].name, false);
-
-                if (plug_status)
-                {
-                    log_debug("t = %lu, node %u, input %u : %u",
-                              now,
-                              node,
-                              plug,
-                              plug_status);
-                    dst_node = node;
-                    dst_plug = plug;
-                }
-            }
-            for (uint32_t plug = 0; plug < type->output_count; plug++)
-            {
-                uint32_t plug_status = ui->plug(type->outputs[plug].name, true);
-                if (plug_status)
-                {
-                    log_debug("t = %lu, node %u, output %u : %u",
-                              now,
-                              node,
-                              plug,
-                              plug_status);
-                    src_node = node;
-                    src_plug = plug;
-                }
-            }
-
-            ui->end_node();
-            ui->pop_id();
-        }
-
-        if (src_node && dst_node)
-        {
-            log_debug(
-                "Connection : %d",
-                connect_nodes(&graph, src_node, src_plug, dst_node, dst_plug));
         }
 
         y = sinf(freq * t);

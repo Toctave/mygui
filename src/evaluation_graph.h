@@ -53,6 +53,7 @@ typedef struct node_t
     uint32_t type;
 
     plug_input_t inputs[MAX_INPUT_COUNT];
+    quad_i32_t box;
 } node_t;
 
 typedef struct node_graph_t

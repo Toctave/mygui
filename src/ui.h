@@ -32,10 +32,6 @@ typedef struct oui_api
     bool (*button)(const char* txt);
     bool (*checkbox)(const char* txt, bool* value);
 
-    void (*begin_node)(const char* name);
-    uint32_t (*plug)(const char* name, bool output);
-    void (*end_node)();
-
     void (*begin_frame)();
     void (*end_frame)();
 } oui_api;

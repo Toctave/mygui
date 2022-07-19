@@ -21,10 +21,6 @@
 #include "ui.h"
 #include "util.h"
 
-static mem_api* mem;
-static database_api* db;
-static oui_api* ui;
-
 static void test_hash()
 {
     const uint32_t buckets = 32;
@@ -72,7 +68,7 @@ typedef struct blob_t
     float x;
 } blob_t;
 
-static void test_db()
+static void test_db(mem_api* mem, database_api* db)
 {
     database_o* mydb = db->create(&mem->vm);
 
@@ -133,7 +129,7 @@ void add_integer(const node_plug_value_t* inputs, node_plug_value_t* outputs)
               outputs[0].integer);
 }
 
-static void test_eval_graph()
+static void test_eval_graph(mem_api* mem)
 {
     node_graph_t graph;
     node_graph_init(&mem->std, &graph);
@@ -181,21 +177,21 @@ int main(int argc, const char** argv)
     }
 
     plugin_manager_init();
-    mem = load_plugin("memory", (version_t){1, 0, 0});
+    mem_api* mem = load_plugin("memory", (version_t){1, 0, 0});
     ASSERT(mem);
-    db = load_plugin("database", (version_t){0, 0, 1});
+    database_api* db = load_plugin("database", (version_t){0, 0, 1});
     ASSERT(db);
     renderer_api* render_api = load_plugin("renderer", (version_t){0, 0, 1});
     ASSERT(render_api);
 
-    ui = load_plugin("ui", (version_t){0, 0, 1});
+    oui_api* ui = load_plugin("ui", (version_t){0, 0, 1});
     ASSERT(ui);
 
     log_init(&mem->vm);
 
     test_hash();
-    test_db();
-    test_eval_graph();
+    test_db(mem, db);
+    test_eval_graph(mem);
 
     void* tmp_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
     mem_stack_allocator_o* tmp_alloc =

@@ -20,7 +20,7 @@ src/stretchy_buffer.c
 src/util.c
 "
 
-libs="-lGLX -lX11 -lGL -lm -ldl"
+libs="-lGL -lX11 -lm -ldl"
 warnings="-Wall -Wextra -Wpedantic"
 
 exe_flags="-Wl,--export-dynamic"

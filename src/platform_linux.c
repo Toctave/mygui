@@ -18,6 +18,8 @@
 #include <string.h>
 #include <time.h>
 
+char EXECUTABLE_PATH[1024];
+
 // source : https://forum.juce.com/t/detecting-if-a-process-is-being-run-under-a-debugger/2098
 // This works on both linux and MacOSX (and any BSD kernel).
 bool platform_running_under_debugger()

@@ -39,19 +39,19 @@ typedef struct node_type_definition_t
                      node_plug_value_t* outputs);
 } node_type_definition_t;
 
-typedef struct plug_state_t
+typedef struct node_plug_state_t
 {
-    uint32_t input_node;
-    uint32_t input_plug;
+    uint32_t connected_node;
+    uint32_t connected_plug;
 
     node_plug_value_t value;
-} plug_state_t;
+} node_plug_state_t;
 
 typedef struct node_t
 {
     uint32_t type;
 
-    plug_state_t plugs[MAX_PLUG_COUNT];
+    node_plug_state_t plugs[MAX_PLUG_COUNT];
     quad_i32_t box;
 } node_t;
 
@@ -61,9 +61,8 @@ typedef struct node_graph_t
     /* array */ node_t* nodes;
 } node_graph_t;
 
-node_plug_value_t* get_plug_value(const node_graph_t* graph,
-                                  uint32_t node_index,
-                                  uint32_t plug_index);
+node_plug_value_t*
+get_plug_value(node_graph_t* graph, uint32_t node_index, uint32_t plug_index);
 
 void node_graph_init(mem_allocator_i* alloc, node_graph_t* graph);
 uint32_t add_node_type(mem_allocator_i* alloc,

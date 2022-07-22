@@ -294,13 +294,13 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
             ui->draw_quad(quad_i32_grown(sq, -2), color_rgb(0x40, 0x40, 0xff));
 
             if (is_input(graph, node_index, plug)
-                && node->plugs[plug].input_node)
+                && node->plugs[plug].connected_node)
             {
                 int32_t src_plug_x, src_plug_y;
                 get_plug_pos(ui,
                              graph,
-                             node->plugs[plug].input_node,
-                             node->plugs[plug].input_plug,
+                             node->plugs[plug].connected_node,
+                             node->plugs[plug].connected_plug,
                              &src_plug_x,
                              &src_plug_y);
                 ui->draw_line(src_plug_x,

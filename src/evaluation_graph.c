@@ -51,7 +51,7 @@ depends_on_node(node_graph_t* graph, uint32_t target, uint32_t source)
     node_type_definition_t* target_type = get_node_type(graph, target);
     for (uint32_t i = 0; i < target_type->input_count; i++)
     {
-        uint32_t input = target_node->plugs[i].input_node;
+        uint32_t input = target_node->plugs[i].connected_node;
 
         if (input && depends_on_node(graph, input, source))
         {
@@ -69,9 +69,16 @@ bool is_input(const node_graph_t* graph, uint32_t node, uint32_t plug_index)
     return plug_index < type->input_count;
 }
 
-static uint32_t get_plug_type(node_graph_t* graph, uint32_t node, uint32_t plug)
+static const node_plug_definition_t*
+get_plug_definition(const node_graph_t* graph, uint32_t node, uint32_t plug)
 {
-    return get_node_type(graph, node)->plugs[plug].type;
+    return &get_node_type(graph, node)->plugs[plug];
+}
+
+static node_plug_state_t*
+get_plug_state(node_graph_t* graph, uint32_t node, uint32_t plug)
+{
+    return &graph->nodes[node].plugs[plug];
 }
 
 bool can_connect_nodes(node_graph_t* graph,
@@ -115,8 +122,9 @@ bool can_connect_nodes(node_graph_t* graph,
         }
     }
 
-    bool compatible_types = (get_plug_type(graph, src_node, src_plug)
-                             == get_plug_type(graph, dst_node, dst_plug));
+    bool compatible_types =
+        (get_plug_definition(graph, src_node, src_plug)->type
+         == get_plug_definition(graph, dst_node, dst_plug)->type);
 
     return compatible_types && !depends_on_node(graph, src_node, dst_node);
 }
@@ -128,18 +136,17 @@ void connect_nodes(node_graph_t* graph,
                    uint32_t dst_plug)
 {
     ASSERT(can_connect_nodes(graph, src_node, src_plug, dst_node, dst_plug));
-
     if (is_input(graph, src_node, src_plug))
     {
-        node_t* src = array_safe_get(graph->nodes, src_node);
-        src->plugs[src_plug].input_node = dst_node;
-        src->plugs[src_plug].input_plug = dst_plug;
+        node_plug_state_t* plug = get_plug_state(graph, src_node, src_plug);
+        plug->connected_node = dst_node;
+        plug->connected_plug = dst_plug;
     }
     else
     {
-        node_t* dst = array_safe_get(graph->nodes, dst_node);
-        dst->plugs[dst_plug].input_node = src_node;
-        dst->plugs[dst_plug].input_plug = src_plug;
+        node_plug_state_t* plug = get_plug_state(graph, dst_node, dst_plug);
+        plug->connected_node = src_node;
+        plug->connected_plug = src_plug;
     }
 }
 
@@ -157,13 +164,13 @@ void stupid_evaluate(node_graph_t* graph,
 
     for (uint32_t i = 0; i < type->input_count; i++)
     {
-        if (node->plugs[i].input_node)
+        if (node->plugs[i].connected_node)
         {
             stupid_evaluate(graph,
-                            node->plugs[i].input_node,
-                            node->plugs[i].input_plug);
-            node->plugs[i].value = graph->nodes[node->plugs[i].input_node]
-                                       .plugs[node->plugs[i].input_plug]
+                            node->plugs[i].connected_node,
+                            node->plugs[i].connected_plug);
+            node->plugs[i].value = graph->nodes[node->plugs[i].connected_node]
+                                       .plugs[node->plugs[i].connected_plug]
                                        .value;
         }
 
@@ -178,11 +185,10 @@ void stupid_evaluate(node_graph_t* graph,
     }
 }
 
-node_plug_value_t* get_plug_value(const node_graph_t* graph,
-                                  uint32_t node_index,
-                                  uint32_t plug_index)
+node_plug_value_t*
+get_plug_value(node_graph_t* graph, uint32_t node_index, uint32_t plug_index)
 {
-    plug_state_t* plug =
+    node_plug_state_t* plug =
         &array_safe_get(graph->nodes, node_index)->plugs[plug_index];
 
     return &plug->value;

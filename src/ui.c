@@ -24,8 +24,15 @@ enum drag_drop_state_e
 static struct
 {
     mem_allocator_i* alloc;
-    platform_input_info_t* input;
     renderer_i* renderer;
+
+    int32_t mouse_x;
+    int32_t mouse_y;
+    int32_t mouse_dx;
+    int32_t mouse_dy;
+
+    uint32_t mouse_pressed;
+    uint32_t mouse_released;
 
     int32_t cursor_x;
     int32_t cursor_y;
@@ -62,8 +69,8 @@ static struct
 static bool
 mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
 {
-    return ui.input->mouse_x >= x && ui.input->mouse_x < x + width //
-           && ui.input->mouse_y >= y && ui.input->mouse_y < y + height;
+    return ui.mouse_x >= x && ui.mouse_x < x + width //
+           && ui.mouse_y >= y && ui.mouse_y < y + height;
 }
 
 static void push_id(uint64_t id)
@@ -153,14 +160,13 @@ static bool hold_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
 {
     bool hovered = hover_rect(x, y, w, h);
 
-    if (hovered && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT)
-        && !ui.active_id)
+    if (hovered && (ui.mouse_pressed & MOUSE_BUTTON_LEFT) && !ui.active_id)
     {
         ui.active_id = current_id();
         return false;
     }
     else if (ui.active_id == current_id()
-             && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
+             && (ui.mouse_released & MOUSE_BUTTON_LEFT))
     {
         ui.active_id = 0;
         return true;
@@ -182,8 +188,8 @@ static bool drag_rect(int32_t x,
 
     if (ui.active_id == current_id())
     {
-        *dx = ui.input->mouse_dx;
-        *dy = ui.input->mouse_dy;
+        *dx = ui.mouse_dx;
+        *dy = ui.mouse_dy;
 
         return *dx || *dy;
     }
@@ -207,8 +213,7 @@ drag_rect_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
 
 static bool drag_and_drop_source(const void* payload, uint32_t size)
 {
-    if (current_id() == ui.hovered_id
-        && (ui.input->mouse_pressed & MOUSE_BUTTON_LEFT)
+    if (current_id() == ui.hovered_id && (ui.mouse_pressed & MOUSE_BUTTON_LEFT)
         && ui.drag_state == DRAG_DROP_NONE)
     {
         array_reserve(ui.alloc, ui.drag_payload, size);
@@ -360,7 +365,13 @@ static bool checkbox(const char* txt, bool* value)
 
     if (drag_and_drop_source(0, 0))
     {
-        log_debug("Dragging from checkbox");
+        ui.renderer->draw_line(ui.renderer,
+                               x,
+                               y,
+                               ui.mouse_x,
+                               ui.mouse_y,
+                               1,
+                               color_rgb(0x00, 0x00, 0x00));
     }
 
     if (drag_and_drop_target(0, 0))
@@ -389,12 +400,10 @@ static bool checkbox(const char* txt, bool* value)
     return clicked;
 }
 
-static void
-init(mem_allocator_i* alloc, renderer_i* renderer, platform_input_info_t* input)
+static void init(mem_allocator_i* alloc, renderer_i* renderer)
 {
     ui.alloc = alloc;
     ui.renderer = renderer;
-    ui.input = input;
 
     {
         ui.colors.main = color_gray(0x60);
@@ -507,8 +516,8 @@ static uint32_t plug(const char* name, bool output)
         ui.renderer->draw_line(ui.renderer,
                                cx,
                                cy,
-                               ui.input->mouse_x,
-                               ui.input->mouse_y,
+                               ui.mouse_x,
+                               ui.mouse_y,
                                3.0f,
                                color_rgb(0x00, 0x00, 0xff));
     }
@@ -558,8 +567,8 @@ static void end_node()
     if (handle_drag(x, y, width, height, &dx, &dy))
     {
         uint32_t border_width = 5;
-        int32_t xprev = ui.input->mouse_x - ui.input->mouse_dx;
-        int32_t yprev = ui.input->mouse_y - ui.input->mouse_dy;
+        int32_t xprev = ui.mouse_x - ui.mouse_dx;
+        int32_t yprev = ui.mouse_y - ui.mouse_dy;
 
         bool on_horizontal_border = x + width - xprev <= border_width;
         bool on_vertical_border = y + height - yprev <= border_width;
@@ -590,12 +599,19 @@ static void end_node()
 
 #endif
 
-static void begin_frame()
+static void begin_frame(const platform_input_info_t* input)
 {
+    ui.mouse_x = input->mouse_x;
+    ui.mouse_dx = input->mouse_dx;
+    ui.mouse_y = input->mouse_y;
+    ui.mouse_dy = input->mouse_dy;
+    ui.mouse_pressed = input->mouse_pressed;
+    ui.mouse_released = input->mouse_released;
+
     begin_draw_region(0, 0);
     ui.hovered_id = 0;
     if (ui.drag_state == DRAG_DROP_DRAGGING
-        && (ui.input->mouse_released & MOUSE_BUTTON_LEFT))
+        && (ui.mouse_released & MOUSE_BUTTON_LEFT))
     {
         ui.drag_state = DRAG_DROP_DROPPED;
     }

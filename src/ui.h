@@ -8,9 +8,7 @@ typedef struct mem_allocator_i mem_allocator_i;
 
 typedef struct oui_api
 {
-    void (*init)(mem_allocator_i* alloc,
-                 renderer_i* renderer,
-                 platform_input_info_t* input);
+    void (*init)(mem_allocator_i* alloc, renderer_i* renderer);
     void (*terminate)();
 
     void (*push_id)(uint64_t id);
@@ -30,6 +28,6 @@ typedef struct oui_api
     bool (*drag_and_drop_source)(const void* payload, uint32_t size);
     bool (*drag_and_drop_target)(void* payload, uint32_t size);
 
-    void (*begin_frame)();
+    void (*begin_frame)(const platform_input_info_t* input);
     void (*end_frame)();
 } oui_api;

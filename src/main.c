@@ -177,34 +177,11 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
 
         for (uint32_t plug = 0; plug < type->input_count; plug++)
         {
-            uint32_t plug_status = 0;
             //ui->plug(type->inputs[plug].name, false);
-
-            if (plug_status)
-            {
-                log_debug("t = %lu, node %u, input %u : %u",
-                          platform_get_nanoseconds(),
-                          node,
-                          plug,
-                          plug_status);
-                dst_node = node;
-                dst_plug = plug;
-            }
         }
         for (uint32_t plug = 0; plug < type->output_count; plug++)
         {
-            uint32_t plug_status = 0;
             /* = ui->plug(type->outputs[plug].name, true); */
-            if (plug_status)
-            {
-                log_debug("t = %lu, node %u, output %u : %u",
-                          platform_get_nanoseconds(),
-                          node,
-                          plug,
-                          plug_status);
-                src_node = node;
-                src_plug = plug;
-            }
         }
 
         /* ui->end_node(); */
@@ -259,7 +236,7 @@ int main(int argc, const char** argv)
 
     platform_input_info_t input = {0};
 
-    ui->init(&mem->std, renderer, &input);
+    ui->init(&mem->std, renderer);
 
     float freq = 1.0f;
 
@@ -303,7 +280,7 @@ int main(int argc, const char** argv)
 
         platform_handle_input_events(&input);
 
-        ui->begin_frame();
+        ui->begin_frame(&input);
 
         graph_ui(ui, &graph);
 
@@ -318,6 +295,11 @@ int main(int argc, const char** argv)
 
         static bool b;
         if (ui->checkbox("Thingy on", &b))
+        {
+            log_debug("The thingy is %s", b ? "on" : "off");
+        }
+
+        if (ui->checkbox("Thingy dingy", &b))
         {
             log_debug("The thingy is %s", b ? "on" : "off");
         }

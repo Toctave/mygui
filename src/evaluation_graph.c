@@ -152,6 +152,15 @@ void connect_nodes(node_graph_t* graph,
     }
 }
 
+void disconnect_node(node_graph_t* graph, uint32_t dst_node, uint32_t dst_plug)
+{
+    ASSERT(is_input(graph, dst_node, dst_plug));
+
+    node_plug_state_t* plug = get_plug_state(graph, dst_node, dst_plug);
+    plug->connected_node = 0;
+    plug->connected_plug = 0;
+}
+
 void evaluate_schedule(node_graph_t* graph)
 {
     for (uint32_t i = 1; i < array_count(graph->nodes); i++)

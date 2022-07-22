@@ -87,6 +87,8 @@ void connect_nodes(node_graph_t* graph,
                    uint32_t dst_node,
                    uint32_t dst_plug);
 
+void disconnect_node(node_graph_t* graph, uint32_t dst_node, uint32_t dst_plug);
+
 bool is_input(const node_graph_t* graph, uint32_t node, uint32_t plug_index);
 void build_schedule(mem_allocator_i* alloc, node_graph_t* graph);
 void evaluate_schedule(node_graph_t* graph);

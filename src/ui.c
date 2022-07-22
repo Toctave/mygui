@@ -21,6 +21,13 @@ enum drag_drop_state_e
     DRAG_DROP_DROPPED,
 };
 
+typedef struct draw_region_t
+{
+    int32_t prev_cursor_x;
+    int32_t prev_cursor_y;
+    quad_i32_t box;
+} draw_region_t;
+
 static struct
 {
     mem_allocator_i* alloc;
@@ -30,6 +37,9 @@ static struct
 
     int32_t cursor_x;
     int32_t cursor_y;
+
+    int32_t prev_cursor_x;
+    int32_t prev_cursor_y;
 
     uint64_t active_id;
     uint64_t hovered_id;
@@ -41,7 +51,7 @@ static struct
     uint64_t id_stack[1024];
     uint32_t id_stack_height;
 
-    int32_t draw_region_stack[1024][2];
+    draw_region_t draw_region_stack[1024];
     uint32_t draw_region_stack_height;
 
     color_t colors[UI_COLOR_COUNT];
@@ -73,6 +83,7 @@ static void push_id(uint64_t id)
         ui.id_stack_height
             ? hash_combine(ui.id_stack[ui.id_stack_height - 1], id)
             : id;
+    ASSERT(hashed);
     ui.id_stack[ui.id_stack_height++] = hashed;
 }
 
@@ -96,13 +107,15 @@ static void draw_text(const char* txt, int32_t x, int32_t y)
     ui.renderer->draw_shadowed_text(
         ui.renderer,
         txt,
-        x + ui.padding,
+        x + ui.padding + 1, // TODO(octave) : why +1 ?
         y + ui.padding - 3, // TODO(octave) : why 3 ? font ascent ?
         ui.colors[UI_COLOR_TEXT],
         ui.colors[UI_COLOR_TEXT_SHADOW]);
 }
 
 static uint32_t get_line_height() { return ui.line_height; }
+
+static uint32_t get_margin() { return ui.margin; }
 
 static void draw_quad(quad_i32_t pos, color_t color)
 {
@@ -115,28 +128,30 @@ draw_line(float x1, float y1, float x2, float y2, float width, color_t color)
     ui.renderer->draw_line(ui.renderer, x1, y1, x2, y2, width, color);
 }
 
-static void begin_draw_region(int32_t x, int32_t y)
+static void begin_draw_region(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     ASSERT(ui.draw_region_stack_height
            < STATIC_ARRAY_COUNT(ui.draw_region_stack));
 
-    ui.draw_region_stack[ui.draw_region_stack_height][0] = ui.cursor_x;
-    ui.draw_region_stack[ui.draw_region_stack_height][1] = ui.cursor_y;
-    ui.draw_region_stack_height++;
+    ui.draw_region_stack[ui.draw_region_stack_height++] = (draw_region_t){
+        .prev_cursor_x = ui.cursor_x,
+        .prev_cursor_y = ui.cursor_y,
+        .box = {.min = {x, y}, .extent = {w, h}},
+    };
 
-    ui.cursor_x = x + ui.margin;
-    ui.cursor_y = y + ui.margin;
+    ui.cursor_x = x;
+    ui.cursor_y = y;
 }
 
 static void end_draw_region()
 {
     ASSERT(ui.draw_region_stack_height);
-    ui.draw_region_stack_height--;
 
-    int32_t(*cursor)[2] = &ui.draw_region_stack[ui.draw_region_stack_height];
+    draw_region_t* region =
+        &ui.draw_region_stack[--ui.draw_region_stack_height];
 
-    ui.cursor_x = (*cursor)[0];
-    ui.cursor_y = (*cursor)[1];
+    ui.cursor_x = region->prev_cursor_x;
+    ui.cursor_y = region->prev_cursor_y;
 }
 
 static float clamped_float(float t, float min, float max)
@@ -155,7 +170,7 @@ static float clamped_float(float t, float min, float max)
     }
 }
 
-static bool hover_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
+static bool hover_rect(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     bool is_inside = mouse_inside_region(x, y, w, h);
     bool result;
@@ -177,7 +192,7 @@ static bool hover_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
     return result;
 }
 
-static bool hold_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
+static bool hold_rect(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     bool hovered = hover_rect(x, y, w, h);
     bool result;
@@ -201,12 +216,8 @@ static bool hold_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
     return result;
 }
 
-static bool drag_rect(int32_t x,
-                      int32_t y,
-                      uint32_t w,
-                      uint32_t h,
-                      int32_t* dx,
-                      int32_t* dy)
+static bool
+drag_rect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t* dx, int32_t* dy)
 {
     hold_rect(x, y, w, h);
 
@@ -222,15 +233,13 @@ static bool drag_rect(int32_t x,
     return result;
 }
 
-static bool
-drag_rect_x(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dx)
+static bool drag_rect_x(int32_t x, int32_t y, int32_t w, int32_t h, int32_t* dx)
 {
     int32_t dy;
     return drag_rect(x, y, w, h, dx, &dy) && *dx;
 }
 
-static bool
-drag_rect_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
+static bool drag_rect_y(int32_t x, int32_t y, int32_t w, int32_t h, int32_t* dy)
 {
     int32_t dx;
     return drag_rect(x, y, w, h, &dx, dy) && *dy;
@@ -246,9 +255,26 @@ static bool drag_and_drop_source(const void* payload, uint32_t size)
 
         ui.drag_source_id = current_id();
         ui.drag_state = DRAG_DROP_DRAGGING;
+
+        return true;
     }
-    return ui.drag_source_id == current_id()
-           && ui.drag_state == DRAG_DROP_DRAGGING;
+    else
+    {
+        return false;
+    }
+}
+
+static bool get_drag_and_drop_paylaod(void* payload, uint32_t size)
+{
+    if (ui.drag_state == DRAG_DROP_DRAGGING)
+    {
+        memcpy(payload, ui.drag_payload, size);
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 static bool drag_and_drop_target(void* payload, uint32_t size)
@@ -264,7 +290,35 @@ static bool drag_and_drop_target(void* payload, uint32_t size)
     }
 }
 
-static void newline() { ui.cursor_y += ui.line_height + ui.margin; }
+static draw_region_t* current_region()
+{
+    return &ui.draw_region_stack[ui.draw_region_stack_height - 1];
+}
+
+static int32_t get_cursor_x() { return ui.cursor_x; }
+
+static int32_t get_cursor_y() { return ui.cursor_y; }
+
+static void set_cursor(int32_t x, int32_t y)
+{
+    ui.cursor_x = x;
+    ui.cursor_y = y;
+}
+
+static void new_line()
+{
+    ui.prev_cursor_x = ui.cursor_x;
+    ui.prev_cursor_y = ui.cursor_y;
+
+    ui.cursor_x = current_region()->box.min[0];
+    ui.cursor_y += ui.line_height + ui.margin;
+}
+
+static void same_line()
+{
+    ui.cursor_x = ui.prev_cursor_x;
+    ui.cursor_y = ui.prev_cursor_y;
+}
 
 static void draw_hover_and_active_overlay(int32_t x,
                                           int32_t y,
@@ -283,18 +337,24 @@ static void draw_hover_and_active_overlay(int32_t x,
     }
 }
 
+static int32_t remaining_region_x()
+{
+    return current_region()->box.min[0] + current_region()->box.extent[0]
+           - ui.cursor_x - ui.margin;
+}
+
 static bool slider(const char* txt, float* value, float min, float max)
 {
     push_string_id(txt);
 
-    uint32_t box_width = 200;
-    uint32_t box_height = ui.line_height;
+    int32_t box_width = remaining_region_x();
+    int32_t box_height = ui.line_height;
     int32_t box_x = ui.cursor_x;
     int32_t box_y = ui.cursor_y;
 
     float range = max - min;
     bool finiteRange = range < INFINITY;
-    float unitsToPixels = finiteRange ? box_width / range : 100.0f;
+    float unitsToPixels = finiteRange ? box_width / range : 1.0f;
 
     bool changed = false;
 
@@ -325,17 +385,22 @@ static bool slider(const char* txt, float* value, float min, float max)
 
     pop_id();
 
-    newline();
+    new_line();
 
     return changed;
+}
+
+static int32_t get_text_width(const char* txt)
+{
+    return ui.renderer->get_text_width(ui.renderer, txt) + 2 * ui.padding;
 }
 
 static bool button(const char* txt)
 {
     push_string_id(txt);
 
-    int32_t width =
-        ui.renderer->get_text_width(ui.renderer, txt) + 2 * ui.padding;
+    int32_t width = get_text_width(txt);
+
     int32_t height = ui.line_height;
     int32_t x = ui.cursor_x;
     int32_t y = ui.cursor_y;
@@ -351,7 +416,7 @@ static bool button(const char* txt)
 
     pop_id();
 
-    newline();
+    new_line();
 
     return result;
 }
@@ -371,16 +436,6 @@ static bool checkbox(const char* txt, bool* value)
         *value = !*value;
     }
 
-    if (drag_and_drop_source(0, 0))
-    {
-        draw_line(x, y, ui.mouse.x, ui.mouse.y, 1, color_rgb(0x00, 0x00, 0x00));
-    }
-
-    if (drag_and_drop_target(0, 0))
-    {
-        log_debug("Dropped on checkbox");
-    }
-
     quad_i32_t pos_quad = {{x, y}, {width, height}};
     draw_quad(pos_quad, ui.colors[UI_COLOR_SECONDARY]);
 
@@ -396,9 +451,17 @@ static bool checkbox(const char* txt, bool* value)
 
     pop_id();
 
-    newline();
+    new_line();
 
     return clicked;
+}
+
+static void text(const char* txt)
+{
+    draw_text(txt, ui.cursor_x, ui.cursor_y);
+    ui.cursor_x += get_text_width(txt);
+
+    new_line();
 }
 
 static void init(mem_allocator_i* alloc, renderer_i* renderer)
@@ -430,175 +493,10 @@ static void terminate()
     // TODO(octave)
 }
 
-#if 0
-
-typedef struct ui_plug_id_t
-{
-    uint64_t node;
-    uint64_t plug;
-} ui_plug_id_t;
-
-static void begin_node(const char* name)
-{
-    ASSERT(!ui.current_node_box);
-
-    push_string_id(name);
-
-    uint64_t node_index = hash_find(&ui.node_hash, current_id(), UINT64_MAX);
-    if (node_index == UINT64_MAX)
-    {
-        array_push(ui.alloc,
-                   ui.node_boxes,
-                   ((quad_i32_t){{10, 10}, {200, 200}}));
-        node_index = array_count(ui.node_boxes) - 1;
-        hash_insert(&ui.node_hash, current_id(), node_index);
-    }
-
-    ui.current_node_plug_count = 0;
-    quad_i32_t* box = ui.current_node_box = &ui.node_boxes[node_index];
-
-    int32_t x = box->min[0];
-    int32_t y = box->min[1];
-    uint32_t width = box->extent[0];
-
-    draw_quad(*box, ui.colors[UI_COLOR_BACKGROUND]);
-    draw_quad((quad_i32_t){{x, y}, {width, ui.line_height}},
-                           ui.colors[UI_COLOR_MAIN]);
-
-    draw_text(name, x, y);
-
-    begin_draw_region(x, y + ui.line_height);
-}
-
-static bool plug_id_equals(ui_plug_id_t id1, ui_plug_id_t id2)
-{
-    return id1.node == id2.node && id1.plug == id2.plug;
-}
-
-static uint32_t plug(const char* name, bool output)
-{
-    uint64_t current_node_id = current_id();
-    push_id(ui.current_node_plug_count);
-
-    uint32_t draw_width = 10;
-    uint32_t hover_width = 30;
-    int32_t draw_x = ui.cursor_x - draw_width;
-    if (output)
-    {
-        draw_x += ui.current_node_box->extent[0];
-    }
-    int32_t draw_y = ui.cursor_y + ui.line_height / 2 - draw_width / 2;
-
-    int32_t hover_x = draw_x + draw_width / 2 - hover_width / 2;
-    int32_t hover_y = draw_y + draw_width / 2 - hover_width / 2;
-
-    draw_text(name, ui.cursor_x, ui.cursor_y);
-    newline();
-
-    draw_quad(
-        (quad_i32_t){{draw_x, draw_y}, {draw_width, draw_width}},
-        color_rgb(0xFF, 0x00, 0x00));
-
-    handle_hold_and_release(hover_x, hover_y, hover_width, hover_width);
-
-    ui_plug_id_t plug_id = {
-        .node = current_node_id,
-        .plug = ui.current_node_plug_count++,
-    };
-
-    ui_plug_id_t source_plug;
-    if (ui.active_id == current_id())
-    {
-        drag_and_drop_source(&plug_id, sizeof(plug_id));
-        int32_t cx = draw_x + draw_width / 2;
-        int32_t cy = draw_y + draw_width / 2;
-        draw_line(cx,
-                  cy,
-                  ui.mouse.x,
-                  ui.mouse.y,
-                  3.0f,
-                  color_rgb(0x00, 0x00, 0xff));
-    }
-    else if (drag_and_drop_target(&source_plug, sizeof(source_plug))
-             && !plug_id_equals(plug_id, source_plug))
-    {
-        ui.connection_happened_this_frame = true;
-        ui.connection[0] = source_plug;
-        ui.connection[1] = plug_id;
-    }
-
-    pop_id();
-
-    if (ui.connection_needs_handling)
-    {
-        if (plug_id_equals(plug_id, ui.connection[0]))
-        {
-            return PLUG_CONNECTION_SOURCE;
-        }
-        else if (plug_id_equals(plug_id, ui.connection[1]))
-        {
-            return PLUG_CONNECTION_DESTINATION;
-        }
-        else
-        {
-            return PLUG_CONNECTION_NONE;
-        }
-    }
-    else
-    {
-        return PLUG_CONNECTION_NONE;
-    }
-}
-
-static void end_node()
-{
-    ASSERT(ui.current_node_box);
-
-    quad_i32_t* node = ui.current_node_box;
-
-    int32_t x = node->min[0];
-    int32_t y = node->min[1];
-    uint32_t width = node->extent[0];
-    uint32_t height = node->extent[1];
-
-    int32_t dx, dy;
-    if (handle_drag(x, y, width, height, &dx, &dy))
-    {
-        uint32_t border_width = 5;
-        int32_t xprev = ui.mouse.x - ui.mouse.dx;
-        int32_t yprev = ui.mouse.y - ui.mouse.dy;
-
-        bool on_horizontal_border = x + width - xprev <= border_width;
-        bool on_vertical_border = y + height - yprev <= border_width;
-
-        if (on_horizontal_border || on_vertical_border)
-        {
-            if (on_horizontal_border)
-            {
-                node->extent[0] += dx;
-            }
-            if (on_vertical_border)
-            {
-                node->extent[1] += dy;
-            }
-        }
-        else
-        {
-            node->min[0] += dx;
-            node->min[1] += dy;
-        }
-    }
-
-    end_draw_region();
-
-    pop_id();
-    ui.current_node_box = 0;
-}
-
-#endif
-
 static void begin_frame(const platform_input_info_t* input)
 {
+    begin_draw_region(ui.margin, ui.margin, 200, INT32_MAX);
+
     ui.mouse.x = input->mouse_x;
     ui.mouse.dx = input->mouse_dx;
     ui.mouse.y = input->mouse_y;
@@ -606,7 +504,6 @@ static void begin_frame(const platform_input_info_t* input)
     ui.mouse.pressed = input->mouse_pressed;
     ui.mouse.released = input->mouse_released;
 
-    begin_draw_region(0, 0);
     ui.hovered_id = 0;
     if (ui.drag_state == DRAG_DROP_DRAGGING
         && (ui.mouse.released & MOUSE_BUTTON_LEFT))
@@ -618,6 +515,7 @@ static void begin_frame(const platform_input_info_t* input)
 static void end_frame()
 {
     end_draw_region();
+
     ASSERT(ui.draw_region_stack_height == 0);
     ASSERT(ui.id_stack_height == 1);
 
@@ -646,17 +544,25 @@ static void load(void* api)
     ui_api->end_draw_region = end_draw_region;
     ui_api->end_frame = end_frame;
     ui_api->get_line_height = get_line_height;
+    ui_api->get_margin = get_margin;
     ui_api->get_mouse = get_mouse;
     ui_api->get_color = get_color;
+    ui_api->get_cursor_x = get_cursor_x;
+    ui_api->get_cursor_y = get_cursor_y;
+    ui_api->get_drag_and_drop_payload = get_drag_and_drop_paylaod;
+    ui_api->set_cursor = set_cursor;
     ui_api->hover_rect = hover_rect;
     ui_api->hold_rect = hold_rect;
     ui_api->drag_rect = drag_rect;
     ui_api->init = init;
+    ui_api->new_line = new_line;
     ui_api->pop_id = pop_id;
     ui_api->push_id = push_id;
     ui_api->push_string_id = push_string_id;
+    ui_api->same_line = same_line;
     ui_api->slider = slider;
     ui_api->terminate = terminate;
+    ui_api->text = text;
 }
 
 plugin_spec_t PLUGIN_SPEC = {

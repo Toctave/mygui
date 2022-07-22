@@ -43,7 +43,7 @@ typedef struct oui_api
     void (*pop_id)();
     uint64_t (*current_id)();
 
-    void (*begin_draw_region)(int32_t x, int32_t y);
+    void (*begin_draw_region)(int32_t x, int32_t y, int32_t w, int32_t h);
     void (*end_draw_region)();
 
     void (*draw_quad)(quad_i32_t pos, color_t color);
@@ -55,23 +55,31 @@ typedef struct oui_api
                       color_t color);
     void (*draw_text)(const char* txt, int32_t x, int32_t y);
 
-    uint32_t (*get_line_height)();
-
-    bool (*hover_rect)(int32_t x, int32_t y, uint32_t w, uint32_t h);
-    bool (*hold_rect)(int32_t x, int32_t y, uint32_t w, uint32_t h);
+    bool (*hover_rect)(int32_t x, int32_t y, int32_t w, int32_t h);
+    bool (*hold_rect)(int32_t x, int32_t y, int32_t w, int32_t h);
     bool (*drag_rect)(int32_t x,
                       int32_t y,
-                      uint32_t w,
-                      uint32_t h,
+                      int32_t w,
+                      int32_t h,
                       int32_t* dx,
                       int32_t* dy);
 
+    uint32_t (*get_line_height)();
+    uint32_t (*get_margin)();
+    int32_t (*get_cursor_x)();
+    int32_t (*get_cursor_y)();
+    void (*set_cursor)(int32_t x, int32_t y);
+    void (*same_line)();
+    void (*new_line)();
+
+    void (*text)(const char* txt);
     bool (*slider)(const char* txt, float* value, float min, float max);
     bool (*button)(const char* txt);
     bool (*checkbox)(const char* txt, bool* value);
 
     bool (*drag_and_drop_source)(const void* payload, uint32_t size);
     bool (*drag_and_drop_target)(void* payload, uint32_t size);
+    bool (*get_drag_and_drop_payload)(void* payload, uint32_t size);
 
     color_t* (*get_color)(uint32_t name);
 } oui_api;

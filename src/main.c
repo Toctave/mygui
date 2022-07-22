@@ -178,48 +178,45 @@ static void get_plug_pos(oui_api* ui,
 {
     node_t* node = &graph->nodes[node_index];
 
+    uint32_t line_height = ui->get_line_height();
+    uint32_t margin = ui->get_margin();
+
     *x = is_input(graph, node_index, plug)
              ? node->box.min[0]
              : node->box.min[0] + node->box.extent[0];
-    *y = node->box.min[1] + ui->get_line_height() * (1.5 + plug);
-}
-
-static int snprint_plug_value(char* buffer,
-                              uint32_t size,
-                              node_graph_t* graph,
-                              uint32_t node_index,
-                              uint32_t plug)
-{
-    node_t* node = &graph->nodes[node_index];
-    node_type_definition_t* type = &graph->node_types[node->type];
-    node_plug_value_t* value = &node->plugs[plug].value;
-    switch (type->plugs[plug].type)
-    {
-    case PLUG_INTEGER:
-        return snprintf(buffer, size, "%ld", value->integer);
-    case PLUG_FLOAT:
-        return snprintf(buffer, size, "%f", value->floating);
-    default:
-        return 0;
-    }
+    *y = node->box.min[1]                // top
+         + (line_height + margin)        // title
+         + (line_height + margin) * plug // plug
+         + line_height / 2               // line middle
+        ;
 }
 
 static void graph_ui(oui_api* ui, node_graph_t* graph)
 {
+    typedef struct plug_info_t
+    {
+        uint32_t node;
+        uint32_t plug;
+    } plug_info_t;
+
     for (uint32_t node_index = 1; node_index < array_count(graph->nodes);
          node_index++)
     {
         node_t* node = &graph->nodes[node_index];
         node_type_definition_t* type = &graph->node_types[node->type];
 
-        ui->begin_draw_region(node->box.min[0], node->box.min[1]);
+        uint32_t line_height = ui->get_line_height();
+        uint32_t ui_margin = ui->get_margin();
+        node->box.extent[1] =
+            (line_height + ui_margin) * (type->plug_count + 1);
+
+        ui->begin_draw_region(node->box.min[0],
+                              node->box.min[1],
+                              node->box.extent[0],
+                              node->box.extent[1]);
 
         ui->push_id(node_index);
         /* ui->begin_node(type->name); */
-
-        uint32_t resize_margin = 10;
-        int32_t dx, dy;
-        uint32_t line_height = ui->get_line_height();
 
         ui->draw_quad(node->box, *ui->get_color(UI_COLOR_BACKGROUND));
         ui->draw_quad((quad_i32_t){{node->box.min[0], node->box.min[1]},
@@ -229,37 +226,20 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         char title[512];
         snprintf(title, sizeof(title), "%s (%u)", type->name, node_index);
 
-        ui->draw_text(title, node->box.min[0], node->box.min[1]);
+        ui->text(title);
 
-        int32_t x = node->box.min[0];
-        int32_t y = node->box.min[1] + line_height;
-
-        typedef struct plug_info_t
-        {
-            uint32_t node;
-            uint32_t plug;
-        } plug_info_t;
+        uint32_t plugs_margin = 5;
+        ui->begin_draw_region(ui->get_cursor_x() + plugs_margin,
+                              ui->get_cursor_y(),
+                              node->box.extent[0] - 2 * plugs_margin,
+                              node->box.extent[1] - 2 * ui_margin);
 
         for (uint32_t plug = 0; plug < type->plug_count; plug++)
         {
             ui->push_id(plug);
 
-            char plug_txt[MAX_PLUG_NAME + 256];
-            int written = 0;
-            written += snprintf(plug_txt + written,
-                                sizeof(plug_txt) - written,
-                                "%s : ",
-                                type->plugs[plug].name);
-            /* node->plugs[plug].value.integer); */
-
-            written += snprint_plug_value(plug_txt + written,
-                                          sizeof(plug_txt) - written,
-                                          graph,
-                                          node_index,
-                                          plug);
-
-            ui->draw_text(plug_txt, x + 4, y);
-            y += line_height;
+            ui->text(type->plugs[plug].name);
+            ui->same_line();
 
             int32_t plug_x, plug_y;
             get_plug_pos(ui, graph, node_index, plug, &plug_x, &plug_y);
@@ -271,29 +251,52 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                           hover_sq.extent[0],
                           hover_sq.extent[1]);
 
-            plug_info_t this_plug = {node_index, plug};
-            if (ui->drag_and_drop_source(&this_plug, sizeof(this_plug)))
+            plug_info_t src_plug = {node_index, plug};
+            int32_t src_plug_x = plug_x, src_plug_y = plug_y;
+
+            bool is_connected_input = is_input(graph, node_index, plug)
+                                      && node->plugs[plug].connected_node;
+
+            if (is_connected_input)
             {
-                ui->draw_line(plug_x,
+                // if already connected, draw connection, and use the
+                // connected plug as source when dragging
+                src_plug = (plug_info_t){node->plugs[plug].connected_node,
+                                         node->plugs[plug].connected_plug};
+                get_plug_pos(ui,
+                             graph,
+                             src_plug.node,
+                             src_plug.plug,
+                             &src_plug_x,
+                             &src_plug_y);
+
+                ui->draw_line(src_plug_x,
+                              src_plug_y,
+                              plug_x,
                               plug_y,
-                              ui->get_mouse().x,
-                              ui->get_mouse().y,
                               4,
                               *ui->get_color(UI_COLOR_MAIN));
             }
 
-            plug_info_t source_plug;
-            if (ui->drag_and_drop_target(&source_plug, sizeof(source_plug)))
+            if (ui->drag_and_drop_source(&src_plug, sizeof(src_plug)))
+            {
+                if (is_connected_input)
+                {
+                    disconnect_node(graph, node_index, plug);
+                }
+            }
+
+            if (ui->drag_and_drop_target(&src_plug, sizeof(src_plug)))
             {
                 if (can_connect_nodes(graph,
-                                      source_plug.node,
-                                      source_plug.plug,
+                                      src_plug.node,
+                                      src_plug.plug,
                                       node_index,
                                       plug))
                 {
                     connect_nodes(graph,
-                                  source_plug.node,
-                                  source_plug.plug,
+                                  src_plug.node,
+                                  src_plug.plug,
                                   node_index,
                                   plug);
                 }
@@ -303,53 +306,43 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
             ui->draw_quad(quad_i32_grown(sq, -2),
                           *ui->get_color(UI_COLOR_MAIN));
 
-            if (is_input(graph, node_index, plug))
+            node_plug_value_t* val = get_plug_value(graph, node_index, plug);
+
+            switch (type->plugs[plug].type)
             {
-                if (node->plugs[plug].connected_node)
-                {
-                    int32_t src_plug_x, src_plug_y;
-                    get_plug_pos(ui,
-                                 graph,
-                                 node->plugs[plug].connected_node,
-                                 node->plugs[plug].connected_plug,
-                                 &src_plug_x,
-                                 &src_plug_y);
-                    ui->draw_line(src_plug_x,
-                                  src_plug_y,
-                                  plug_x,
-                                  plug_y,
-                                  4,
-                                  *ui->get_color(UI_COLOR_MAIN));
-                }
-                else
-                {
-                    switch (type->plugs[plug].type)
-                    {
-                    case PLUG_FLOAT:
-                    {
-                        node_plug_value_t* val =
-                            get_plug_value(graph, node_index, plug);
+            case PLUG_FLOAT:
+            {
+                float u = val->floating;
+                ui->slider(type->plugs[plug].name, &u, -INFINITY, INFINITY);
+                ui->same_line();
 
-                        float u = val->floating;
-                        ui->slider(type->plugs[plug].name, &u, 0.0f, 10.0f);
-
-                        val->floating = u;
-                    }
-                    break;
-                    case PLUG_INTEGER:
-                        break;
-                    }
-                }
+                val->floating = u;
             }
+            break;
+            case PLUG_INTEGER:
+            {
+                float u = val->integer;
+                ui->slider(type->plugs[plug].name, &u, -INFINITY, INFINITY);
+                ui->same_line();
+
+                val->integer = u;
+            }
+            break;
+            }
+
+            ui->new_line();
 
             ui->pop_id();
         }
 
+        uint32_t resize_margin = 10;
+
+        int32_t dx, dy;
         ui->push_string_id("move");
         if (ui->drag_rect(node->box.min[0],
                           node->box.min[1],
                           node->box.extent[0] - resize_margin,
-                          node->box.extent[1] - resize_margin,
+                          node->box.extent[1],
                           &dx,
                           &dy))
         {
@@ -363,7 +356,7 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                               - resize_margin,
                           node->box.min[1],
                           resize_margin,
-                          node->box.extent[1] - resize_margin,
+                          node->box.extent[1],
                           &dx,
                           &dy))
         {
@@ -371,36 +364,29 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         }
         ui->pop_id();
 
-        ui->push_string_id("resize_y");
-        if (ui->drag_rect(node->box.min[0],
-                          node->box.min[1] + node->box.extent[1]
-                              - resize_margin,
-                          node->box.extent[0] - resize_margin,
-                          resize_margin,
-                          &dx,
-                          &dy))
-        {
-            node->box.extent[1] += dy;
-        }
-        ui->pop_id();
+        ui->end_draw_region();
 
-        ui->push_string_id("resize_x_y");
-        if (ui->drag_rect(
-                node->box.min[0] + node->box.extent[0] - resize_margin,
-                node->box.min[1] + node->box.extent[1] - resize_margin,
-                resize_margin,
-                resize_margin,
-                &dx,
-                &dy))
-        {
-            node->box.extent[0] += dx;
-            node->box.extent[1] += dy;
-        }
-        ui->pop_id();
-
-        /* ui->end_node(); */
         ui->pop_id();
         ui->end_draw_region();
+    }
+
+    plug_info_t dragging_plug;
+    if (ui->get_drag_and_drop_payload(&dragging_plug, sizeof(dragging_plug)))
+    {
+        int32_t dragging_x, dragging_y;
+        get_plug_pos(ui,
+                     graph,
+                     dragging_plug.node,
+                     dragging_plug.plug,
+                     &dragging_x,
+                     &dragging_y);
+
+        ui->draw_line(dragging_x,
+                      dragging_y,
+                      ui->get_mouse().x,
+                      ui->get_mouse().y,
+                      4,
+                      *ui->get_color(UI_COLOR_MAIN));
     }
 }
 
@@ -422,6 +408,23 @@ DefineNodeEvaluator(node_sin) { outputs[0].floating = sin(inputs[0].floating); }
 DefineNodeEvaluator(node_multiply)
 {
     outputs[0].floating = inputs[0].floating * inputs[1].floating;
+}
+
+DefineNodeEvaluator(node_add)
+{
+    outputs[0].floating = inputs[0].floating + inputs[1].floating;
+}
+
+renderer_i* renderer;
+
+DefineNodeEvaluator(node_draw_quad)
+{
+    renderer->draw_quad(
+        renderer,
+        (quad_i32_t){{inputs[0].floating, inputs[1].floating},
+                     {inputs[2].floating, inputs[3].floating}},
+        color_rgb(inputs[4].floating, inputs[5].floating, inputs[6].floating));
+    (void)outputs;
 }
 
 int main(int argc, const char** argv)
@@ -461,7 +464,7 @@ int main(int argc, const char** argv)
     mem_stack_allocator_o* permanent_alloc =
         mem->stack_create(permanent_stack_buf, Gibi(1024));
 
-    renderer_i* renderer = render_api->create(mem, permanent_alloc, tmp_alloc);
+    renderer = render_api->create(mem, permanent_alloc, tmp_alloc);
 
     platform_input_info_t input = {0};
 
@@ -518,6 +521,40 @@ int main(int argc, const char** argv)
                               {.name = "result", .type = PLUG_FLOAT},
                           },
                       .evaluate = node_multiply,
+                  });
+
+    add_node_type(&mem->std,
+                  &graph,
+                  (node_type_definition_t){
+                      .name = "add",
+                      .input_count = 2,
+                      .plug_count = 3,
+                      .plugs =
+                          {
+                              {.name = "a", .type = PLUG_FLOAT},
+                              {.name = "b", .type = PLUG_FLOAT},
+                              {.name = "result", .type = PLUG_FLOAT},
+                          },
+                      .evaluate = node_add,
+                  });
+
+    add_node_type(&mem->std,
+                  &graph,
+                  (node_type_definition_t){
+                      .name = "draw rectangle",
+                      .input_count = 7,
+                      .plug_count = 7,
+                      .plugs =
+                          {
+                              {.name = "x", .type = PLUG_FLOAT},
+                              {.name = "y", .type = PLUG_FLOAT},
+                              {.name = "width", .type = PLUG_FLOAT},
+                              {.name = "height", .type = PLUG_FLOAT},
+                              {.name = "r", .type = PLUG_FLOAT},
+                              {.name = "g", .type = PLUG_FLOAT},
+                              {.name = "b", .type = PLUG_FLOAT},
+                          },
+                      .evaluate = node_draw_quad,
                   });
 
     for (uint32_t i = 1; i < array_count(graph.nodes); i++)

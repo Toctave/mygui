@@ -223,7 +223,7 @@ bool platform_init(const char* argv0,
 
     if (isGLXExtensionPresent(default_screen, "GLX_EXT_swap_control"))
     {
-        glXSwapIntervalEXT(dpy, glxWindow, 1);
+        glXSwapIntervalEXT(dpy, glxWindow, 0);
     }
     else
     {

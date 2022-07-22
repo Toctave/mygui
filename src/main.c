@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "assert.h"
+#include "color.h"
 #include "data_model.h"
 #include "evaluation_graph.h"
 #include "hash.h"
@@ -167,13 +168,33 @@ static void test_eval_graph(mem_api* mem)
 static void graph_ui(oui_api* ui, node_graph_t* graph)
 {
     uint32_t src_node = 0, src_plug = 0, dst_node = 0, dst_plug = 0;
-    for (uint32_t node = 1; node < array_count(graph->nodes); node++)
+    for (uint32_t node_index = 1; node_index < array_count(graph->nodes);
+         node_index++)
     {
-        node_type_definition_t* type =
-            &graph->node_types[graph->nodes[node].type];
+        node_t* node = &graph->nodes[node_index];
+        node_type_definition_t* type = &graph->node_types[node->type];
 
-        ui->push_id(node);
+        ui->push_id(node_index);
         /* ui->begin_node(type->name); */
+
+        int32_t dx, dy;
+        if (ui->drag_rect(node->box.min[0],
+                          node->box.min[1],
+                          node->box.extent[0],
+                          node->box.extent[1],
+                          &dx,
+                          &dy))
+        {
+            node->box.min[0] += dx;
+            node->box.min[1] += dy;
+        }
+
+        ui->draw_quad(node->box, color_rgb(0x00, 0x00, 0x00));
+        ui->draw_quad(
+            (quad_i32_t){{node->box.min[0], node->box.min[1]},
+                         {node->box.extent[0], ui->get_line_height()}},
+            color_rgb(0xFF, 0x00, 0x00));
+        ui->draw_text(type->name, node->box.min[0], node->box.min[1]);
 
         for (uint32_t plug = 0; plug < type->input_count; plug++)
         {
@@ -260,6 +281,8 @@ int main(int argc, const char** argv)
         uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
         add_node(&mem->std, &graph, add_type);
         add_node(&mem->std, &graph, add_type);
+
+        graph.nodes[1].box = (quad_i32_t){{10, 10}, {100, 100}};
     }
 
     uint64_t watched = platform_watch_file("/tmp/test");

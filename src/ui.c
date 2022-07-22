@@ -98,6 +98,30 @@ static uint64_t current_id()
     return ui.id_stack[ui.id_stack_height - 1];
 }
 
+static void draw_text(const char* txt, int32_t x, int32_t y)
+{
+    ui.renderer->draw_shadowed_text(
+        ui.renderer,
+        txt,
+        x + ui.padding,
+        y + ui.padding - 3, // TODO(octave) : why 3 ? font ascent ?
+        ui.colors.text,
+        ui.colors.text_shadow);
+}
+
+static uint32_t get_line_height() { return ui.line_height; }
+
+static void draw_quad(quad_i32_t pos, color_t color)
+{
+    ui.renderer->draw_quad(ui.renderer, pos, color);
+}
+
+static void
+draw_line(float x1, float y1, float x2, float y2, float width, color_t color)
+{
+    ui.renderer->draw_line(ui.renderer, x1, y1, x2, y2, width, color);
+}
+
 static void begin_draw_region(int32_t x, int32_t y)
 {
     ASSERT(ui.draw_region_stack_height
@@ -248,27 +272,14 @@ static void draw_hover_and_active_overlay(int32_t x,
 {
     if (ui.active_id == current_id())
     {
-        ui.renderer->draw_quad(ui.renderer,
-                               (quad_i32_t){{x, y}, {width, height}},
-                               ui.colors.active_overlay);
+        draw_quad((quad_i32_t){{x, y}, {width, height}},
+                  ui.colors.active_overlay);
     }
     else if (ui.hovered_id == current_id())
     {
-        ui.renderer->draw_quad(ui.renderer,
-                               (quad_i32_t){{x, y}, {width, height}},
-                               ui.colors.hover_overlay);
+        draw_quad((quad_i32_t){{x, y}, {width, height}},
+                  ui.colors.hover_overlay);
     }
-}
-
-static void draw_text(const char* txt, int32_t x, int32_t y)
-{
-    ui.renderer->draw_shadowed_text(
-        ui.renderer,
-        txt,
-        x + ui.padding,
-        y + ui.padding - 3, // TODO(octave) : why 3 ? font ascent ?
-        ui.colors.text,
-        ui.colors.text_shadow);
 }
 
 static bool slider(const char* txt, float* value, float min, float max)
@@ -293,19 +304,15 @@ static bool slider(const char* txt, float* value, float min, float max)
         *value = clamped_float(*value, min, max);
     }
 
-    ui.renderer->draw_quad(
-        ui.renderer,
-        (quad_i32_t){{box_x, box_y}, {box_width, box_height}},
-        ui.colors.secondary);
+    draw_quad((quad_i32_t){{box_x, box_y}, {box_width, box_height}},
+              ui.colors.secondary);
     if (finiteRange)
     {
         int32_t slider_position =
             unitsToPixels * (clamped_float(*value, min, max) - min);
 
-        ui.renderer->draw_quad(
-            ui.renderer,
-            (quad_i32_t){{box_x, box_y}, {slider_position, box_height}},
-            ui.colors.main);
+        draw_quad((quad_i32_t){{box_x, box_y}, {slider_position, box_height}},
+                  ui.colors.main);
     }
 
     char value_txt[256];
@@ -335,7 +342,7 @@ static bool button(const char* txt)
     bool result = hold_rect(x, y, width, height);
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
-    ui.renderer->draw_quad(ui.renderer, pos_quad, ui.colors.main);
+    draw_quad(pos_quad, ui.colors.main);
 
     draw_text(txt, x, y);
 
@@ -365,13 +372,7 @@ static bool checkbox(const char* txt, bool* value)
 
     if (drag_and_drop_source(0, 0))
     {
-        ui.renderer->draw_line(ui.renderer,
-                               x,
-                               y,
-                               ui.mouse_x,
-                               ui.mouse_y,
-                               1,
-                               color_rgb(0x00, 0x00, 0x00));
+        draw_line(x, y, ui.mouse_x, ui.mouse_y, 1, color_rgb(0x00, 0x00, 0x00));
     }
 
     if (drag_and_drop_target(0, 0))
@@ -380,13 +381,11 @@ static bool checkbox(const char* txt, bool* value)
     }
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
-    ui.renderer->draw_quad(ui.renderer, pos_quad, ui.colors.secondary);
+    draw_quad(pos_quad, ui.colors.secondary);
 
     if (*value)
     {
-        ui.renderer->draw_quad(ui.renderer,
-                               quad_i32_grown(pos_quad, width / 4),
-                               ui.colors.main);
+        draw_quad(quad_i32_grown(pos_quad, width / 4), ui.colors.main);
     }
 
     draw_text(txt, x + width, y);
@@ -460,9 +459,8 @@ static void begin_node(const char* name)
     int32_t y = box->min[1];
     uint32_t width = box->extent[0];
 
-    ui.renderer->draw_quad(ui.renderer, *box, ui.colors.background);
-    ui.renderer->draw_quad(ui.renderer,
-                           (quad_i32_t){{x, y}, {width, ui.line_height}},
+    draw_quad(*box, ui.colors.background);
+    draw_quad((quad_i32_t){{x, y}, {width, ui.line_height}},
                            ui.colors.main);
 
     draw_text(name, x, y);
@@ -495,8 +493,7 @@ static uint32_t plug(const char* name, bool output)
     draw_text(name, ui.cursor_x, ui.cursor_y);
     newline();
 
-    ui.renderer->draw_quad(
-        ui.renderer,
+    draw_quad(
         (quad_i32_t){{draw_x, draw_y}, {draw_width, draw_width}},
         color_rgb(0xFF, 0x00, 0x00));
 
@@ -513,13 +510,12 @@ static uint32_t plug(const char* name, bool output)
         drag_and_drop_source(&plug_id, sizeof(plug_id));
         int32_t cx = draw_x + draw_width / 2;
         int32_t cy = draw_y + draw_width / 2;
-        ui.renderer->draw_line(ui.renderer,
-                               cx,
-                               cy,
-                               ui.mouse_x,
-                               ui.mouse_y,
-                               3.0f,
-                               color_rgb(0x00, 0x00, 0xff));
+        draw_line(cx,
+                  cy,
+                  ui.mouse_x,
+                  ui.mouse_y,
+                  3.0f,
+                  color_rgb(0x00, 0x00, 0xff));
     }
     else if (drag_and_drop_target(&source_plug, sizeof(source_plug))
              && !plug_id_equals(plug_id, source_plug))
@@ -642,8 +638,14 @@ static void load(void* api)
     ui_api->current_id = current_id;
     ui_api->drag_and_drop_source = drag_and_drop_source;
     ui_api->drag_and_drop_target = drag_and_drop_target;
+    ui_api->draw_line = draw_line;
+    ui_api->draw_quad = draw_quad;
+    ui_api->draw_text = draw_text;
     ui_api->end_frame = end_frame;
+    ui_api->get_line_height = get_line_height;
     ui_api->hover_rect = hover_rect;
+    ui_api->hold_rect = hold_rect;
+    ui_api->drag_rect = drag_rect;
     ui_api->init = init;
     ui_api->pop_id = pop_id;
     ui_api->push_id = push_id;

@@ -19,7 +19,25 @@ typedef struct oui_api
     void (*begin_draw_region)(int32_t x, int32_t y);
     void (*end_draw_region)();
 
+    void (*draw_quad)(quad_i32_t pos, color_t color);
+    void (*draw_line)(float x1,
+                      float y1,
+                      float x2,
+                      float y2,
+                      float width,
+                      color_t color);
+    void (*draw_text)(const char* txt, int32_t x, int32_t y);
+
+    uint32_t (*get_line_height)();
+
     bool (*hover_rect)(int32_t x, int32_t y, uint32_t w, uint32_t h);
+    bool (*hold_rect)(int32_t x, int32_t y, uint32_t w, uint32_t h);
+    bool (*drag_rect)(int32_t x,
+                      int32_t y,
+                      uint32_t w,
+                      uint32_t h,
+                      int32_t* dx,
+                      int32_t* dy);
 
     bool (*slider)(const char* txt, float* value, float min, float max);
     bool (*button)(const char* txt);

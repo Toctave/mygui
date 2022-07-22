@@ -177,43 +177,61 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         ui->push_id(node_index);
         /* ui->begin_node(type->name); */
 
+        uint32_t resize_margin = 10;
         int32_t dx, dy;
+
+        ui->push_string_id("move");
         if (ui->drag_rect(node->box.min[0],
                           node->box.min[1],
-                          node->box.extent[0],
-                          node->box.extent[1],
+                          node->box.extent[0] - resize_margin,
+                          node->box.extent[1] - resize_margin,
                           &dx,
                           &dy))
         {
-            ui_mouse_t mouse = ui->get_mouse();
-
-            int32_t dist_to_right =
-                node->box.min[0] + node->box.extent[0] - (mouse.x - mouse.dx);
-            int32_t dist_to_bottom =
-                node->box.min[1] + node->box.extent[1] - (mouse.y - mouse.dy);
-
-            bool resize_x = dist_to_right < 5;
-            bool resize_y = dist_to_bottom < 5;
-
-            if (resize_x && resize_y)
-            {
-                node->box.extent[0] += dx;
-                node->box.extent[1] += dy;
-            }
-            else if (resize_x)
-            {
-                node->box.extent[0] += dx;
-            }
-            else if (resize_y)
-            {
-                node->box.extent[1] += dy;
-            }
-            else
-            {
-                node->box.min[0] += dx;
-                node->box.min[1] += dy;
-            }
+            node->box.min[0] += dx;
+            node->box.min[1] += dy;
         }
+        ui->pop_id();
+
+        ui->push_string_id("resize_x");
+        if (ui->drag_rect(node->box.min[0] + node->box.extent[0]
+                              - resize_margin,
+                          node->box.min[1],
+                          resize_margin,
+                          node->box.extent[1] - resize_margin,
+                          &dx,
+                          &dy))
+        {
+            node->box.extent[0] += dx;
+        }
+        ui->pop_id();
+
+        ui->push_string_id("resize_y");
+        if (ui->drag_rect(node->box.min[0],
+                          node->box.min[1] + node->box.extent[1]
+                              - resize_margin,
+                          node->box.extent[0] - resize_margin,
+                          resize_margin,
+                          &dx,
+                          &dy))
+        {
+            node->box.extent[1] += dy;
+        }
+        ui->pop_id();
+
+        ui->push_string_id("resize_x_y");
+        if (ui->drag_rect(
+                node->box.min[0] + node->box.extent[0] - resize_margin,
+                node->box.min[1] + node->box.extent[1] - resize_margin,
+                resize_margin,
+                resize_margin,
+                &dx,
+                &dy))
+        {
+            node->box.extent[0] += dx;
+            node->box.extent[1] += dy;
+        }
+        ui->pop_id();
 
         ui->draw_quad(node->box, color_rgb(0x00, 0x00, 0x00));
         ui->draw_quad(
@@ -307,11 +325,17 @@ int main(int argc, const char** argv)
         uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
         add_node(&mem->std, &graph, add_type);
         add_node(&mem->std, &graph, add_type);
-
-        graph.nodes[1].box = (quad_i32_t){{10, 10}, {100, 100}};
     }
 
-    uint64_t watched = platform_watch_file("/tmp/test");
+    for (uint32_t i = 1; i < array_count(graph.nodes); i++)
+    {
+        uint32_t width = 200;
+        uint32_t height = 300;
+        uint32_t margin = 10;
+        graph.nodes[i].box =
+            (quad_i32_t){{i * (margin * 2 + width) + margin, margin},
+                         {width, height}};
+    }
 
     // main loop
     while (!input.should_exit)

@@ -161,40 +161,47 @@ static float clamped_float(float t, float min, float max)
 static bool hover_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
 {
     bool is_inside = mouse_inside_region(x, y, w, h);
-
+    bool result;
     if (!ui.hovered_id && is_inside)
     {
         ui.hovered_id = current_id();
-        return true;
+        result = true;
     }
     else if (ui.hovered_id == current_id() && !is_inside)
     {
         ui.hovered_id = 0;
-        return false;
+        result = false;
+    }
+    else
+    {
+        result = ui.hovered_id == current_id();
     }
 
-    return ui.hovered_id == current_id();
+    return result;
 }
 
 static bool hold_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
 {
     bool hovered = hover_rect(x, y, w, h);
+    bool result;
 
     if (hovered && (ui.mouse.pressed & MOUSE_BUTTON_LEFT) && !ui.active_id)
     {
         ui.active_id = current_id();
-        return false;
+        result = false;
     }
     else if (ui.active_id == current_id()
              && (ui.mouse.released & MOUSE_BUTTON_LEFT))
     {
         ui.active_id = 0;
-        return true;
+        result = true;
     }
     else
     {
-        return false;
+        result = false;
     }
+
+    return result;
 }
 
 static bool drag_rect(int32_t x,
@@ -206,15 +213,16 @@ static bool drag_rect(int32_t x,
 {
     hold_rect(x, y, w, h);
 
+    bool result = false;
     if (ui.active_id == current_id())
     {
         *dx = ui.mouse.dx;
         *dy = ui.mouse.dy;
 
-        return *dx || *dy;
+        result = *dx || *dy;
     }
 
-    return false;
+    return result;
 }
 
 static bool

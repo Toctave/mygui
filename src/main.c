@@ -185,8 +185,34 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                           &dx,
                           &dy))
         {
-            node->box.min[0] += dx;
-            node->box.min[1] += dy;
+            ui_mouse_t mouse = ui->get_mouse();
+
+            int32_t dist_to_right =
+                node->box.min[0] + node->box.extent[0] - (mouse.x - mouse.dx);
+            int32_t dist_to_bottom =
+                node->box.min[1] + node->box.extent[1] - (mouse.y - mouse.dy);
+
+            bool resize_x = dist_to_right < 5;
+            bool resize_y = dist_to_bottom < 5;
+
+            if (resize_x && resize_y)
+            {
+                node->box.extent[0] += dx;
+                node->box.extent[1] += dy;
+            }
+            else if (resize_x)
+            {
+                node->box.extent[0] += dx;
+            }
+            else if (resize_y)
+            {
+                node->box.extent[1] += dy;
+            }
+            else
+            {
+                node->box.min[0] += dx;
+                node->box.min[1] += dy;
+            }
         }
 
         ui->draw_quad(node->box, color_rgb(0x00, 0x00, 0x00));

@@ -6,10 +6,25 @@ typedef struct renderer_i renderer_i;
 typedef struct platform_input_info_t platform_input_info_t;
 typedef struct mem_allocator_i mem_allocator_i;
 
+typedef struct ui_mouse_t
+{
+    int32_t x;
+    int32_t y;
+    int32_t dx;
+    int32_t dy;
+
+    uint32_t pressed;
+    uint32_t released;
+} ui_mouse_t;
+
 typedef struct oui_api
 {
     void (*init)(mem_allocator_i* alloc, renderer_i* renderer);
     void (*terminate)();
+
+    void (*begin_frame)(const platform_input_info_t* input);
+    void (*end_frame)();
+    ui_mouse_t (*get_mouse)();
 
     void (*push_id)(uint64_t id);
     void (*push_string_id)(const char* txt);
@@ -45,7 +60,4 @@ typedef struct oui_api
 
     bool (*drag_and_drop_source)(const void* payload, uint32_t size);
     bool (*drag_and_drop_target)(void* payload, uint32_t size);
-
-    void (*begin_frame)(const platform_input_info_t* input);
-    void (*end_frame)();
 } oui_api;

@@ -26,13 +26,7 @@ static struct
     mem_allocator_i* alloc;
     renderer_i* renderer;
 
-    int32_t mouse_x;
-    int32_t mouse_y;
-    int32_t mouse_dx;
-    int32_t mouse_dy;
-
-    uint32_t mouse_pressed;
-    uint32_t mouse_released;
+    ui_mouse_t mouse;
 
     int32_t cursor_x;
     int32_t cursor_y;
@@ -66,11 +60,13 @@ static struct
     uint32_t line_height;
 } ui;
 
+static ui_mouse_t get_mouse() { return ui.mouse; }
+
 static bool
 mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
 {
-    return ui.mouse_x >= x && ui.mouse_x < x + width //
-           && ui.mouse_y >= y && ui.mouse_y < y + height;
+    return ui.mouse.x >= x && ui.mouse.x < x + width //
+           && ui.mouse.y >= y && ui.mouse.y < y + height;
 }
 
 static void push_id(uint64_t id)
@@ -184,13 +180,13 @@ static bool hold_rect(int32_t x, int32_t y, uint32_t w, uint32_t h)
 {
     bool hovered = hover_rect(x, y, w, h);
 
-    if (hovered && (ui.mouse_pressed & MOUSE_BUTTON_LEFT) && !ui.active_id)
+    if (hovered && (ui.mouse.pressed & MOUSE_BUTTON_LEFT) && !ui.active_id)
     {
         ui.active_id = current_id();
         return false;
     }
     else if (ui.active_id == current_id()
-             && (ui.mouse_released & MOUSE_BUTTON_LEFT))
+             && (ui.mouse.released & MOUSE_BUTTON_LEFT))
     {
         ui.active_id = 0;
         return true;
@@ -212,8 +208,8 @@ static bool drag_rect(int32_t x,
 
     if (ui.active_id == current_id())
     {
-        *dx = ui.mouse_dx;
-        *dy = ui.mouse_dy;
+        *dx = ui.mouse.dx;
+        *dy = ui.mouse.dy;
 
         return *dx || *dy;
     }
@@ -237,7 +233,7 @@ drag_rect_y(int32_t x, int32_t y, uint32_t w, uint32_t h, int32_t* dy)
 
 static bool drag_and_drop_source(const void* payload, uint32_t size)
 {
-    if (current_id() == ui.hovered_id && (ui.mouse_pressed & MOUSE_BUTTON_LEFT)
+    if (current_id() == ui.hovered_id && (ui.mouse.pressed & MOUSE_BUTTON_LEFT)
         && ui.drag_state == DRAG_DROP_NONE)
     {
         array_reserve(ui.alloc, ui.drag_payload, size);
@@ -372,7 +368,7 @@ static bool checkbox(const char* txt, bool* value)
 
     if (drag_and_drop_source(0, 0))
     {
-        draw_line(x, y, ui.mouse_x, ui.mouse_y, 1, color_rgb(0x00, 0x00, 0x00));
+        draw_line(x, y, ui.mouse.x, ui.mouse.y, 1, color_rgb(0x00, 0x00, 0x00));
     }
 
     if (drag_and_drop_target(0, 0))
@@ -512,8 +508,8 @@ static uint32_t plug(const char* name, bool output)
         int32_t cy = draw_y + draw_width / 2;
         draw_line(cx,
                   cy,
-                  ui.mouse_x,
-                  ui.mouse_y,
+                  ui.mouse.x,
+                  ui.mouse.y,
                   3.0f,
                   color_rgb(0x00, 0x00, 0xff));
     }
@@ -563,8 +559,8 @@ static void end_node()
     if (handle_drag(x, y, width, height, &dx, &dy))
     {
         uint32_t border_width = 5;
-        int32_t xprev = ui.mouse_x - ui.mouse_dx;
-        int32_t yprev = ui.mouse_y - ui.mouse_dy;
+        int32_t xprev = ui.mouse.x - ui.mouse.dx;
+        int32_t yprev = ui.mouse.y - ui.mouse.dy;
 
         bool on_horizontal_border = x + width - xprev <= border_width;
         bool on_vertical_border = y + height - yprev <= border_width;
@@ -597,17 +593,17 @@ static void end_node()
 
 static void begin_frame(const platform_input_info_t* input)
 {
-    ui.mouse_x = input->mouse_x;
-    ui.mouse_dx = input->mouse_dx;
-    ui.mouse_y = input->mouse_y;
-    ui.mouse_dy = input->mouse_dy;
-    ui.mouse_pressed = input->mouse_pressed;
-    ui.mouse_released = input->mouse_released;
+    ui.mouse.x = input->mouse_x;
+    ui.mouse.dx = input->mouse_dx;
+    ui.mouse.y = input->mouse_y;
+    ui.mouse.dy = input->mouse_dy;
+    ui.mouse.pressed = input->mouse_pressed;
+    ui.mouse.released = input->mouse_released;
 
     begin_draw_region(0, 0);
     ui.hovered_id = 0;
     if (ui.drag_state == DRAG_DROP_DRAGGING
-        && (ui.mouse_released & MOUSE_BUTTON_LEFT))
+        && (ui.mouse.released & MOUSE_BUTTON_LEFT))
     {
         ui.drag_state = DRAG_DROP_DROPPED;
     }
@@ -643,6 +639,7 @@ static void load(void* api)
     ui_api->draw_text = draw_text;
     ui_api->end_frame = end_frame;
     ui_api->get_line_height = get_line_height;
+    ui_api->get_mouse = get_mouse;
     ui_api->hover_rect = hover_rect;
     ui_api->hold_rect = hold_rect;
     ui_api->drag_rect = drag_rect;

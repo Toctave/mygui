@@ -17,6 +17,18 @@ typedef struct ui_mouse_t
     uint32_t released;
 } ui_mouse_t;
 
+enum ui_color_e
+{
+    UI_COLOR_MAIN,
+    UI_COLOR_SECONDARY,
+    UI_COLOR_BACKGROUND,
+    UI_COLOR_TEXT,
+    UI_COLOR_TEXT_SHADOW,
+    UI_COLOR_ACTIVE_OVERLAY,
+    UI_COLOR_HOVER_OVERLAY,
+    UI_COLOR_COUNT,
+};
+
 typedef struct oui_api
 {
     void (*init)(mem_allocator_i* alloc, renderer_i* renderer);
@@ -60,4 +72,6 @@ typedef struct oui_api
 
     bool (*drag_and_drop_source)(const void* payload, uint32_t size);
     bool (*drag_and_drop_target)(void* payload, uint32_t size);
+
+    color_t* (*get_color)(uint32_t name);
 } oui_api;

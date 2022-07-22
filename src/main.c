@@ -181,6 +181,26 @@ static void get_plug_pos(oui_api* ui,
     *y = node->box.min[1] + ui->get_line_height() * (1.5 + plug);
 }
 
+static int snprint_plug_value(char* buffer,
+                              uint32_t size,
+                              node_graph_t* graph,
+                              uint32_t node_index,
+                              uint32_t plug)
+{
+    node_t* node = &graph->nodes[node_index];
+    node_type_definition_t* type = &graph->node_types[node->type];
+    node_plug_value_t* value = &node->plugs[plug].value;
+    switch (type->plugs[plug].type)
+    {
+    case PLUG_INTEGER:
+        return snprintf(buffer, size, "%ld", value->integer);
+    case PLUG_FLOAT:
+        return snprintf(buffer, size, "%f", value->floating);
+    default:
+        return 0;
+    }
+}
+
 static void graph_ui(oui_api* ui, node_graph_t* graph)
 {
     for (uint32_t node_index = 1; node_index < array_count(graph->nodes);
@@ -216,11 +236,18 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
             ui->push_id(plug);
 
             char plug_txt[MAX_PLUG_NAME + 256];
-            snprintf(plug_txt,
-                     sizeof(plug_txt),
-                     "%s : %ld",
-                     type->plugs[plug].name,
-                     node->plugs[plug].value.integer);
+            int written = 0;
+            written += snprintf(plug_txt + written,
+                                sizeof(plug_txt) - written,
+                                "%s : ",
+                                type->plugs[plug].name);
+            /* node->plugs[plug].value.integer); */
+
+            written += snprint_plug_value(plug_txt + written,
+                                          sizeof(plug_txt) - written,
+                                          graph,
+                                          node_index,
+                                          plug);
 
             ui->draw_text(plug_txt, x + 4, y);
             y += line_height;
@@ -393,25 +420,20 @@ int main(int argc, const char** argv)
     uint64_t t0 = platform_get_nanoseconds();
 
     node_graph_t graph;
-    {
-        node_graph_init(&mem->std, &graph);
+    node_graph_init(&mem->std, &graph);
 
-        node_type_definition_t node_add = {
-            .name = "add",
-            .input_count = 2,
-            .plug_count = 3,
-            .plugs = {{.name = "a", .type = PLUG_INTEGER},
-                      {.name = "b", .type = PLUG_INTEGER},
-                      {.name = "result", .type = PLUG_INTEGER}},
+    add_node_type(&mem->std,
+                  &graph,
+                  (node_type_definition_t){
+                      .name = "add integers",
+                      .input_count = 2,
+                      .plug_count = 3,
+                      .plugs = {{.name = "a", .type = PLUG_INTEGER},
+                                {.name = "b", .type = PLUG_INTEGER},
+                                {.name = "result", .type = PLUG_INTEGER}},
 
-            .evaluate = add_integer,
-        };
-
-        uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
-        add_node(&mem->std, &graph, add_type);
-        add_node(&mem->std, &graph, add_type);
-        add_node(&mem->std, &graph, add_type);
-    }
+                      .evaluate = add_integer,
+                  });
 
     for (uint32_t i = 1; i < array_count(graph.nodes); i++)
     {
@@ -444,15 +466,24 @@ int main(int argc, const char** argv)
         graph.nodes[1].plugs[0].value.integer++;
         graph_ui(ui, &graph);
 
-        stupid_evaluate(&graph, array_count(graph.nodes) - 1, 2);
-
-        if (ui->button("Do the thingy"))
+        if (array_count(graph.nodes) > 1)
         {
-            log_debug("Did the thingy");
+            stupid_evaluate(&graph, array_count(graph.nodes) - 1, 2);
         }
-        if (ui->button("Undo the thingy"))
+
+        for (uint32_t type_index = 1;
+             type_index < array_count(graph.node_types);
+             type_index++)
         {
-            log_debug("Undid the thingy");
+            char* label = tprintf(mem,
+                                  tmp_alloc,
+                                  "Add '%s' node",
+                                  graph.node_types[type_index].name);
+            if (ui->button(label))
+            {
+                uint32_t idx = add_node(&mem->std, &graph, type_index);
+                graph.nodes[idx].box = (quad_i32_t){{50, 50}, {200, 200}};
+            }
         }
 
         static bool b;

@@ -44,16 +44,7 @@ static struct
     int32_t draw_region_stack[1024][2];
     uint32_t draw_region_stack_height;
 
-    struct
-    {
-        color_t main;
-        color_t secondary;
-        color_t background;
-        color_t text;
-        color_t text_shadow;
-        color_t active_overlay;
-        color_t hover_overlay;
-    } colors;
+    color_t colors[UI_COLOR_COUNT];
 
     uint32_t padding;
     uint32_t margin;
@@ -61,6 +52,12 @@ static struct
 } ui;
 
 static ui_mouse_t get_mouse() { return ui.mouse; }
+
+static color_t* get_color(uint32_t name)
+{
+    ASSERT(name < UI_COLOR_COUNT);
+    return &ui.colors[name];
+}
 
 static bool
 mouse_inside_region(int32_t x, int32_t y, int32_t width, int32_t height)
@@ -101,8 +98,8 @@ static void draw_text(const char* txt, int32_t x, int32_t y)
         txt,
         x + ui.padding,
         y + ui.padding - 3, // TODO(octave) : why 3 ? font ascent ?
-        ui.colors.text,
-        ui.colors.text_shadow);
+        ui.colors[UI_COLOR_TEXT],
+        ui.colors[UI_COLOR_TEXT_SHADOW]);
 }
 
 static uint32_t get_line_height() { return ui.line_height; }
@@ -277,12 +274,12 @@ static void draw_hover_and_active_overlay(int32_t x,
     if (ui.active_id == current_id())
     {
         draw_quad((quad_i32_t){{x, y}, {width, height}},
-                  ui.colors.active_overlay);
+                  ui.colors[UI_COLOR_ACTIVE_OVERLAY]);
     }
     else if (ui.hovered_id == current_id())
     {
         draw_quad((quad_i32_t){{x, y}, {width, height}},
-                  ui.colors.hover_overlay);
+                  ui.colors[UI_COLOR_HOVER_OVERLAY]);
     }
 }
 
@@ -309,14 +306,14 @@ static bool slider(const char* txt, float* value, float min, float max)
     }
 
     draw_quad((quad_i32_t){{box_x, box_y}, {box_width, box_height}},
-              ui.colors.secondary);
+              ui.colors[UI_COLOR_SECONDARY]);
     if (finiteRange)
     {
         int32_t slider_position =
             unitsToPixels * (clamped_float(*value, min, max) - min);
 
         draw_quad((quad_i32_t){{box_x, box_y}, {slider_position, box_height}},
-                  ui.colors.main);
+                  ui.colors[UI_COLOR_MAIN]);
     }
 
     char value_txt[256];
@@ -346,7 +343,7 @@ static bool button(const char* txt)
     bool result = hold_rect(x, y, width, height);
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
-    draw_quad(pos_quad, ui.colors.main);
+    draw_quad(pos_quad, ui.colors[UI_COLOR_MAIN]);
 
     draw_text(txt, x, y);
 
@@ -385,11 +382,12 @@ static bool checkbox(const char* txt, bool* value)
     }
 
     quad_i32_t pos_quad = {{x, y}, {width, height}};
-    draw_quad(pos_quad, ui.colors.secondary);
+    draw_quad(pos_quad, ui.colors[UI_COLOR_SECONDARY]);
 
     if (*value)
     {
-        draw_quad(quad_i32_grown(pos_quad, -width / 4), ui.colors.main);
+        draw_quad(quad_i32_grown(pos_quad, -width / 4),
+                  ui.colors[UI_COLOR_MAIN]);
     }
 
     draw_text(txt, x + width, y);
@@ -409,15 +407,15 @@ static void init(mem_allocator_i* alloc, renderer_i* renderer)
     ui.renderer = renderer;
 
     {
-        ui.colors.main = color_gray(0x60);
-        ui.colors.secondary = color_gray(0x30);
-        ui.colors.background = color_gray(0x10);
+        ui.colors[UI_COLOR_MAIN] = color_gray(0x60);
+        ui.colors[UI_COLOR_SECONDARY] = color_gray(0x30);
+        ui.colors[UI_COLOR_BACKGROUND] = color_gray(0x10);
 
-        ui.colors.text = color_gray(0xFF);
-        ui.colors.text_shadow = color_gray(0x00);
+        ui.colors[UI_COLOR_TEXT] = color_gray(0xFF);
+        ui.colors[UI_COLOR_TEXT_SHADOW] = color_gray(0x00);
 
-        ui.colors.hover_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
-        ui.colors.active_overlay = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
+        ui.colors[UI_COLOR_HOVER_OVERLAY] = color_rgba(0xFF, 0xFF, 0xFF, 0x40);
+        ui.colors[UI_COLOR_ACTIVE_OVERLAY] = color_rgba(0xFF, 0xFF, 0xFF, 0x20);
     }
 
     ui.padding = 6;
@@ -463,9 +461,9 @@ static void begin_node(const char* name)
     int32_t y = box->min[1];
     uint32_t width = box->extent[0];
 
-    draw_quad(*box, ui.colors.background);
+    draw_quad(*box, ui.colors[UI_COLOR_BACKGROUND]);
     draw_quad((quad_i32_t){{x, y}, {width, ui.line_height}},
-                           ui.colors.main);
+                           ui.colors[UI_COLOR_MAIN]);
 
     draw_text(name, x, y);
 
@@ -648,6 +646,7 @@ static void load(void* api)
     ui_api->end_frame = end_frame;
     ui_api->get_line_height = get_line_height;
     ui_api->get_mouse = get_mouse;
+    ui_api->get_color = get_color;
     ui_api->hover_rect = hover_rect;
     ui_api->hold_rect = hold_rect;
     ui_api->drag_rect = drag_rect;

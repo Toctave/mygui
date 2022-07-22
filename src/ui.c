@@ -389,7 +389,7 @@ static bool checkbox(const char* txt, bool* value)
 
     if (*value)
     {
-        draw_quad(quad_i32_grown(pos_quad, width / 4), ui.colors.main);
+        draw_quad(quad_i32_grown(pos_quad, -width / 4), ui.colors.main);
     }
 
     draw_text(txt, x + width, y);

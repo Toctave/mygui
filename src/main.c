@@ -124,10 +124,6 @@ static void test_db(mem_api* mem, database_api* db)
 void add_integer(const node_plug_value_t* inputs, node_plug_value_t* outputs)
 {
     outputs[0].integer = inputs[0].integer + inputs[1].integer;
-    log_debug("%ld + %ld = %ld",
-              inputs[0].integer,
-              inputs[1].integer,
-              outputs[0].integer);
 }
 
 static void test_eval_graph(mem_api* mem)
@@ -138,11 +134,10 @@ static void test_eval_graph(mem_api* mem)
     node_type_definition_t node_add = {
         .name = "add",
         .input_count = 2,
-        .inputs = {{.name = "a", .type = PLUG_INTEGER},
-                   {.name = "b", .type = PLUG_INTEGER}},
-        .output_count = 1,
-        .outputs = {{.name = "result", .type = PLUG_INTEGER}},
-
+        .plug_count = 3,
+        .plugs = {{.name = "a", .type = PLUG_INTEGER},
+                  {.name = "b", .type = PLUG_INTEGER},
+                  {.name = "result", .type = PLUG_INTEGER}},
         .evaluate = add_integer,
     };
 
@@ -151,9 +146,7 @@ static void test_eval_graph(mem_api* mem)
     uint32_t f = add_node(&mem->std, &graph, add_type);
     uint32_t g = add_node(&mem->std, &graph, add_type);
 
-    connect_nodes(&graph, f, 0, g, 0);
-    connect_nodes(&graph, f, 0, g, 0);
-    connect_nodes(&graph, g, 0, f, 1);
+    connect_nodes(&graph, f, 2, g, 0);
 
     int64_t* x = &get_input_value(&graph, f, 0)->integer;
     int64_t* y = &get_input_value(&graph, f, 1)->integer;
@@ -162,12 +155,33 @@ static void test_eval_graph(mem_api* mem)
     *x = 43;
     *y = 25;
     *z = 4;
-    log_debug("result = %ld", stupid_evaluate(&graph, g, 0).integer);
+    log_debug("result = %ld", stupid_evaluate(&graph, g, 2).integer);
+}
+
+static quad_i32_t square(int32_t x, int32_t y, int32_t width)
+{
+    ASSERT(!(width % 2));
+
+    return (quad_i32_t){{x - width / 2, y - width / 2}, {width, width}};
+}
+
+static void get_plug_pos(oui_api* ui,
+                         node_graph_t* graph,
+                         uint32_t node_index,
+                         uint32_t plug,
+                         int32_t* x,
+                         int32_t* y)
+{
+    node_t* node = &graph->nodes[node_index];
+
+    *x = is_input(graph, node_index, plug)
+             ? node->box.min[0]
+             : node->box.min[0] + node->box.extent[0];
+    *y = node->box.min[1] + ui->get_line_height() * (1.5 + plug);
 }
 
 static void graph_ui(oui_api* ui, node_graph_t* graph)
 {
-    uint32_t src_node = 0, src_plug = 0, dst_node = 0, dst_plug = 0;
     for (uint32_t node_index = 1; node_index < array_count(graph->nodes);
          node_index++)
     {
@@ -179,6 +193,98 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
 
         uint32_t resize_margin = 10;
         int32_t dx, dy;
+        uint32_t line_height = ui->get_line_height();
+
+        ui->draw_quad(node->box, color_rgb(0x00, 0x00, 0x00));
+        ui->draw_quad((quad_i32_t){{node->box.min[0], node->box.min[1]},
+                                   {node->box.extent[0], line_height}},
+                      color_rgb(0xFF, 0x40, 0x40));
+        ui->draw_text(type->name, node->box.min[0], node->box.min[1]);
+
+        int32_t x = node->box.min[0];
+        int32_t y = node->box.min[1] + line_height;
+
+        typedef struct plug_info_t
+        {
+            uint32_t node;
+            uint32_t plug;
+        } plug_info_t;
+
+        for (uint32_t plug = 0; plug < type->plug_count; plug++)
+        {
+            ui->push_id(plug);
+
+            char plug_txt[MAX_PLUG_NAME + 256];
+            snprintf(plug_txt,
+                     sizeof(plug_txt),
+                     "%s : %ld",
+                     type->plugs[plug].name,
+                     node->plugs[plug].value.integer);
+
+            ui->draw_text(plug_txt, x + 4, y);
+            y += line_height;
+
+            int32_t plug_x, plug_y;
+            get_plug_pos(ui, graph, node_index, plug, &plug_x, &plug_y);
+            quad_i32_t sq = square(plug_x, plug_y, 12);
+
+            quad_i32_t hover_sq = quad_i32_grown(sq, 4);
+            ui->hold_rect(hover_sq.min[0],
+                          hover_sq.min[1],
+                          hover_sq.extent[0],
+                          hover_sq.extent[1]);
+
+            plug_info_t this_plug = {node_index, plug};
+            if (ui->drag_and_drop_source(&this_plug, sizeof(this_plug)))
+            {
+                ui->draw_line(plug_x,
+                              plug_y,
+                              ui->get_mouse().x,
+                              ui->get_mouse().y,
+                              4,
+                              color_gray(0x80));
+            }
+
+            plug_info_t source_plug;
+            if (ui->drag_and_drop_target(&source_plug, sizeof(source_plug)))
+            {
+                if (can_connect_nodes(graph,
+                                      source_plug.node,
+                                      source_plug.plug,
+                                      node_index,
+                                      plug))
+                {
+                    connect_nodes(graph,
+                                  source_plug.node,
+                                  source_plug.plug,
+                                  node_index,
+                                  plug);
+                }
+            }
+
+            ui->draw_quad(sq, color_rgb(0x00, 0x00, 0x40));
+            ui->draw_quad(quad_i32_grown(sq, -2), color_rgb(0x40, 0x40, 0xff));
+
+            if (is_input(graph, node_index, plug)
+                && node->plugs[plug].input_node)
+            {
+                int32_t src_plug_x, src_plug_y;
+                get_plug_pos(ui,
+                             graph,
+                             node->plugs[plug].input_node,
+                             node->plugs[plug].input_plug,
+                             &src_plug_x,
+                             &src_plug_y);
+                ui->draw_line(src_plug_x,
+                              src_plug_y,
+                              plug_x,
+                              plug_y,
+                              4,
+                              color_gray(0x80));
+            }
+
+            ui->pop_id();
+        }
 
         ui->push_string_id("move");
         if (ui->drag_rect(node->box.min[0],
@@ -233,30 +339,8 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         }
         ui->pop_id();
 
-        ui->draw_quad(node->box, color_rgb(0x00, 0x00, 0x00));
-        ui->draw_quad(
-            (quad_i32_t){{node->box.min[0], node->box.min[1]},
-                         {node->box.extent[0], ui->get_line_height()}},
-            color_rgb(0xFF, 0x00, 0x00));
-        ui->draw_text(type->name, node->box.min[0], node->box.min[1]);
-
-        for (uint32_t plug = 0; plug < type->input_count; plug++)
-        {
-            //ui->plug(type->inputs[plug].name, false);
-        }
-        for (uint32_t plug = 0; plug < type->output_count; plug++)
-        {
-            /* = ui->plug(type->outputs[plug].name, true); */
-        }
-
         /* ui->end_node(); */
         ui->pop_id();
-    }
-
-    if (src_node && dst_node)
-    {
-        log_debug("Connection : %d",
-                  connect_nodes(graph, src_node, src_plug, dst_node, dst_plug));
     }
 }
 
@@ -314,15 +398,16 @@ int main(int argc, const char** argv)
         node_type_definition_t node_add = {
             .name = "add",
             .input_count = 2,
-            .inputs = {{.name = "a", .type = PLUG_INTEGER},
-                       {.name = "b", .type = PLUG_INTEGER}},
-            .output_count = 1,
-            .outputs = {{.name = "result", .type = PLUG_INTEGER}},
+            .plug_count = 3,
+            .plugs = {{.name = "a", .type = PLUG_INTEGER},
+                      {.name = "b", .type = PLUG_INTEGER},
+                      {.name = "result", .type = PLUG_INTEGER}},
 
             .evaluate = add_integer,
         };
 
         uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
+        add_node(&mem->std, &graph, add_type);
         add_node(&mem->std, &graph, add_type);
         add_node(&mem->std, &graph, add_type);
     }
@@ -355,7 +440,10 @@ int main(int argc, const char** argv)
 
         ui->begin_frame(&input);
 
+        graph.nodes[1].plugs[0].value.integer++;
         graph_ui(ui, &graph);
+
+        stupid_evaluate(&graph, array_count(graph.nodes) - 1, 2);
 
         if (ui->button("Do the thingy"))
         {

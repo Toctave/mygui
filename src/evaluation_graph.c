@@ -28,8 +28,8 @@ uint32_t add_node(mem_allocator_i* alloc, node_graph_t* graph, uint32_t type)
     return array_count(graph->nodes) - 1;
 }
 
-static node_type_definition_t* get_node_type(node_graph_t* graph,
-                                             uint32_t node_index)
+node_type_definition_t* get_node_type(const node_graph_t* graph,
+                                      uint32_t node_index)
 {
     ASSERT(node_index < array_count(graph->nodes));
 
@@ -51,7 +51,7 @@ depends_on_node(node_graph_t* graph, uint32_t target, uint32_t source)
     node_type_definition_t* target_type = get_node_type(graph, target);
     for (uint32_t i = 0; i < target_type->input_count; i++)
     {
-        uint32_t input = target_node->inputs[i].node_index;
+        uint32_t input = target_node->plugs[i].input_node;
 
         if (input && depends_on_node(graph, input, source))
         {
@@ -62,69 +62,129 @@ depends_on_node(node_graph_t* graph, uint32_t target, uint32_t source)
     return false;
 }
 
-bool connect_nodes(node_graph_t* graph,
-                   uint32_t input_node_index,
-                   uint32_t input_plug_index,
-                   uint32_t output_node_index,
-                   uint32_t output_plug_index)
+bool is_input(const node_graph_t* graph, uint32_t node, uint32_t plug_index)
 {
-    node_t* out = array_safe_get(graph->nodes, output_node_index);
+    const node_type_definition_t* type = get_node_type(graph, node);
+    ASSERT(plug_index < type->plug_count);
+    return plug_index < type->input_count;
+}
 
-    ASSERT(input_plug_index
-           < get_node_type(graph, input_node_index)->output_count);
-    ASSERT(output_plug_index
-           < get_node_type(graph, output_node_index)->input_count);
+static uint32_t get_plug_type(node_graph_t* graph, uint32_t node, uint32_t plug)
+{
+    return get_node_type(graph, node)->plugs[plug].type;
+}
 
-    // TODO(octave) : type-checking
+bool can_connect_nodes(node_graph_t* graph,
+                       uint32_t node1,
+                       uint32_t plug1,
+                       uint32_t node2,
+                       uint32_t plug2)
+{
+    bool plug1_is_input = is_input(graph, node1, plug1);
+    bool plug2_is_input = is_input(graph, node2, plug2);
 
-    if (depends_on_node(graph, input_node_index, output_node_index))
+    uint32_t src_node, src_plug, dst_node, dst_plug;
+    if (plug1_is_input)
     {
-        return false;
+        if (plug2_is_input)
+        {
+            return false;
+        }
+        else
+        {
+            src_node = node2;
+            src_plug = plug2;
+
+            dst_node = node1;
+            dst_plug = plug1;
+        }
     }
     else
     {
-        out->inputs[output_plug_index].node_index = input_node_index;
-        out->inputs[output_plug_index].plug_index = input_plug_index;
+        if (plug2_is_input)
+        {
+            src_node = node1;
+            src_plug = plug1;
 
-        return true;
+            dst_node = node2;
+            dst_plug = plug2;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    bool compatible_types = (get_plug_type(graph, src_node, src_plug)
+                             == get_plug_type(graph, dst_node, dst_plug));
+
+    return compatible_types && !depends_on_node(graph, src_node, dst_node);
+}
+
+void connect_nodes(node_graph_t* graph,
+                   uint32_t src_node,
+                   uint32_t src_plug,
+                   uint32_t dst_node,
+                   uint32_t dst_plug)
+{
+    ASSERT(can_connect_nodes(graph, src_node, src_plug, dst_node, dst_plug));
+
+    if (is_input(graph, src_node, src_plug))
+    {
+        node_t* src = array_safe_get(graph->nodes, src_node);
+        src->plugs[src_plug].input_node = dst_node;
+        src->plugs[src_plug].input_plug = dst_plug;
+    }
+    else
+    {
+        node_t* dst = array_safe_get(graph->nodes, dst_node);
+        dst->plugs[dst_plug].input_node = src_node;
+        dst->plugs[dst_plug].input_plug = src_plug;
     }
 }
 
 node_plug_value_t
 stupid_evaluate(node_graph_t* graph, uint32_t node_index, uint32_t plug_index)
 {
-    node_plug_value_t inputs[MAX_INPUT_COUNT];
-    node_plug_value_t outputs[MAX_OUTPUT_COUNT];
+    ASSERT(!is_input(graph, node_index, plug_index));
+
+    node_plug_value_t inputs[MAX_PLUG_COUNT];
+    node_plug_value_t outputs[MAX_PLUG_COUNT];
 
     node_t* node = array_safe_get(graph->nodes, node_index);
     node_type_definition_t* type = get_node_type(graph, node_index);
 
     for (uint32_t i = 0; i < type->input_count; i++)
     {
-        if (node->inputs[i].node_index)
+        if (node->plugs[i].input_node)
         {
-            inputs[i] = stupid_evaluate(graph,
-                                        node->inputs[i].node_index,
-                                        node->inputs[i].plug_index);
+            node->plugs[i].value = stupid_evaluate(graph,
+                                                   node->plugs[i].input_node,
+                                                   node->plugs[i].input_plug);
         }
-        else
-        {
-            inputs[i] = node->inputs[i].value;
-        }
+
+        inputs[i] = node->plugs[i].value;
     }
 
     type->evaluate(inputs, outputs);
 
-    return outputs[plug_index];
+    for (uint32_t i = type->input_count; i < type->plug_count; i++)
+    {
+        node->plugs[i].value = outputs[i - type->input_count];
+    }
+
+    uint32_t output_index = plug_index - type->input_count;
+    return outputs[output_index];
 }
 
 node_plug_value_t* get_input_value(const node_graph_t* graph,
                                    uint32_t node_index,
                                    uint32_t plug_index)
 {
-    plug_input_t* input =
-        &array_safe_get(graph->nodes, node_index)->inputs[plug_index];
-    ASSERT(!input->node_index);
+    ASSERT(plug_index < get_node_type(graph, node_index)->input_count);
+    plug_state_t* input =
+        &array_safe_get(graph->nodes, node_index)->plugs[plug_index];
+    ASSERT(!input->input_node);
 
     return &input->value;
 }

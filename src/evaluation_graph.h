@@ -6,6 +6,9 @@
 #define MAX_PLUG_NAME 256
 #define MAX_NODE_TYPE_NAME 256
 
+#define DefineNodeEvaluator(name)                                              \
+    void name(const node_plug_value_t* inputs, node_plug_value_t* outputs)
+
 typedef struct mem_allocator_i mem_allocator_i;
 
 typedef enum node_plug_type_e
@@ -27,6 +30,8 @@ typedef union node_plug_value_t
     int64_t integer;
 } node_plug_value_t;
 
+typedef DefineNodeEvaluator(NodeEvaluationFunction);
+
 typedef struct node_type_definition_t
 {
     char name[MAX_NODE_TYPE_NAME];
@@ -35,8 +40,7 @@ typedef struct node_type_definition_t
     uint32_t plug_count;
     node_plug_definition_t plugs[MAX_PLUG_COUNT];
 
-    void (*evaluate)(const node_plug_value_t* inputs,
-                     node_plug_value_t* outputs);
+    NodeEvaluationFunction* evaluate;
 } node_type_definition_t;
 
 typedef struct node_plug_state_t
@@ -57,6 +61,7 @@ typedef struct node_t
 
 typedef struct node_graph_t
 {
+    /* array */ uint32_t* schedule;
     /* array */ node_type_definition_t* node_types;
     /* array */ node_t* nodes;
 } node_graph_t;
@@ -81,8 +86,7 @@ void connect_nodes(node_graph_t* graph,
                    uint32_t src_plug,
                    uint32_t dst_node,
                    uint32_t dst_plug);
-void stupid_evaluate(node_graph_t* graph,
-                     uint32_t node_index,
-                     uint32_t plug_index);
 
 bool is_input(const node_graph_t* graph, uint32_t node, uint32_t plug_index);
+void build_schedule(mem_allocator_i* alloc, node_graph_t* graph);
+void evaluate_schedule(node_graph_t* graph);

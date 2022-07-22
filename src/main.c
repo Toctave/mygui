@@ -155,7 +155,10 @@ static void test_eval_graph(mem_api* mem)
     *x = 43;
     *y = 25;
     *z = 4;
-    stupid_evaluate(&graph, g, 2);
+
+    build_schedule(&mem->std, &graph);
+    evaluate_schedule(&graph);
+
     log_debug("result = %ld", get_plug_value(&graph, g, 2)->integer);
 }
 
@@ -209,6 +212,8 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         node_t* node = &graph->nodes[node_index];
         node_type_definition_t* type = &graph->node_types[node->type];
 
+        ui->begin_draw_region(node->box.min[0], node->box.min[1]);
+
         ui->push_id(node_index);
         /* ui->begin_node(type->name); */
 
@@ -216,11 +221,15 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         int32_t dx, dy;
         uint32_t line_height = ui->get_line_height();
 
-        ui->draw_quad(node->box, color_rgb(0x00, 0x00, 0x00));
+        ui->draw_quad(node->box, *ui->get_color(UI_COLOR_BACKGROUND));
         ui->draw_quad((quad_i32_t){{node->box.min[0], node->box.min[1]},
                                    {node->box.extent[0], line_height}},
-                      color_rgb(0xFF, 0x40, 0x40));
-        ui->draw_text(type->name, node->box.min[0], node->box.min[1]);
+                      *ui->get_color(UI_COLOR_SECONDARY));
+
+        char title[512];
+        snprintf(title, sizeof(title), "%s (%u)", type->name, node_index);
+
+        ui->draw_text(title, node->box.min[0], node->box.min[1]);
 
         int32_t x = node->box.min[0];
         int32_t y = node->box.min[1] + line_height;
@@ -270,7 +279,7 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                               ui->get_mouse().x,
                               ui->get_mouse().y,
                               4,
-                              color_gray(0x80));
+                              *ui->get_color(UI_COLOR_MAIN));
             }
 
             plug_info_t source_plug;
@@ -290,25 +299,47 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                 }
             }
 
-            ui->draw_quad(sq, color_rgb(0x00, 0x00, 0x40));
-            ui->draw_quad(quad_i32_grown(sq, -2), color_rgb(0x40, 0x40, 0xff));
+            ui->draw_quad(sq, *ui->get_color(UI_COLOR_BACKGROUND));
+            ui->draw_quad(quad_i32_grown(sq, -2),
+                          *ui->get_color(UI_COLOR_MAIN));
 
-            if (is_input(graph, node_index, plug)
-                && node->plugs[plug].connected_node)
+            if (is_input(graph, node_index, plug))
             {
-                int32_t src_plug_x, src_plug_y;
-                get_plug_pos(ui,
-                             graph,
-                             node->plugs[plug].connected_node,
-                             node->plugs[plug].connected_plug,
-                             &src_plug_x,
-                             &src_plug_y);
-                ui->draw_line(src_plug_x,
-                              src_plug_y,
-                              plug_x,
-                              plug_y,
-                              4,
-                              color_gray(0x80));
+                if (node->plugs[plug].connected_node)
+                {
+                    int32_t src_plug_x, src_plug_y;
+                    get_plug_pos(ui,
+                                 graph,
+                                 node->plugs[plug].connected_node,
+                                 node->plugs[plug].connected_plug,
+                                 &src_plug_x,
+                                 &src_plug_y);
+                    ui->draw_line(src_plug_x,
+                                  src_plug_y,
+                                  plug_x,
+                                  plug_y,
+                                  4,
+                                  *ui->get_color(UI_COLOR_MAIN));
+                }
+                else
+                {
+                    switch (type->plugs[plug].type)
+                    {
+                    case PLUG_FLOAT:
+                    {
+                        node_plug_value_t* val =
+                            get_plug_value(graph, node_index, plug);
+
+                        float u = val->floating;
+                        ui->slider(type->plugs[plug].name, &u, 0.0f, 10.0f);
+
+                        val->floating = u;
+                    }
+                    break;
+                    case PLUG_INTEGER:
+                        break;
+                    }
+                }
             }
 
             ui->pop_id();
@@ -369,7 +400,28 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
 
         /* ui->end_node(); */
         ui->pop_id();
+        ui->end_draw_region();
     }
+}
+
+DefineNodeEvaluator(node_get_time)
+{
+    (void)inputs;
+
+    static uint64_t t0 = 0;
+    if (t0 == 0)
+    {
+        t0 = platform_get_nanoseconds();
+    }
+
+    outputs[0].floating = 1e-9 * (platform_get_nanoseconds() - t0);
+}
+
+DefineNodeEvaluator(node_sin) { outputs[0].floating = sin(inputs[0].floating); }
+
+DefineNodeEvaluator(node_multiply)
+{
+    outputs[0].floating = inputs[0].floating * inputs[1].floating;
 }
 
 int main(int argc, const char** argv)
@@ -415,10 +467,6 @@ int main(int argc, const char** argv)
 
     ui->init(&mem->std, renderer);
 
-    float freq = 1.0f;
-
-    uint64_t t0 = platform_get_nanoseconds();
-
     node_graph_t graph;
     node_graph_init(&mem->std, &graph);
 
@@ -433,6 +481,43 @@ int main(int argc, const char** argv)
                                 {.name = "result", .type = PLUG_INTEGER}},
 
                       .evaluate = add_integer,
+                  });
+
+    add_node_type(&mem->std,
+                  &graph,
+                  (node_type_definition_t){
+                      .name = "get time",
+                      .input_count = 0,
+                      .plug_count = 1,
+                      .plugs = {{.name = "time", .type = PLUG_FLOAT}},
+
+                      .evaluate = node_get_time,
+                  });
+
+    add_node_type(&mem->std,
+                  &graph,
+                  (node_type_definition_t){
+                      .name = "sin",
+                      .input_count = 1,
+                      .plug_count = 2,
+                      .plugs = {{.name = "x", .type = PLUG_FLOAT},
+                                {.name = "result", .type = PLUG_FLOAT}},
+                      .evaluate = node_sin,
+                  });
+
+    add_node_type(&mem->std,
+                  &graph,
+                  (node_type_definition_t){
+                      .name = "multiply",
+                      .input_count = 2,
+                      .plug_count = 3,
+                      .plugs =
+                          {
+                              {.name = "a", .type = PLUG_FLOAT},
+                              {.name = "b", .type = PLUG_FLOAT},
+                              {.name = "result", .type = PLUG_FLOAT},
+                          },
+                      .evaluate = node_multiply,
                   });
 
     for (uint32_t i = 1; i < array_count(graph.nodes); i++)
@@ -454,21 +539,17 @@ int main(int argc, const char** argv)
         }
 
         mem->stack_revert(tmp_alloc, 0);
-        uint64_t now = platform_get_nanoseconds();
-
-        float t = (now - t0) * 1e-9f;
-        float y = sinf(t);
 
         platform_handle_input_events(&input);
 
         ui->begin_frame(&input);
 
-        graph.nodes[1].plugs[0].value.integer++;
         graph_ui(ui, &graph);
 
         if (array_count(graph.nodes) > 1)
         {
-            stupid_evaluate(&graph, array_count(graph.nodes) - 1, 2);
+            build_schedule(&mem->std, &graph);
+            evaluate_schedule(&graph);
         }
 
         for (uint32_t type_index = 1;
@@ -477,29 +558,14 @@ int main(int argc, const char** argv)
         {
             char* label = tprintf(mem,
                                   tmp_alloc,
-                                  "Add '%s' node",
+                                  "%s",
                                   graph.node_types[type_index].name);
             if (ui->button(label))
             {
                 uint32_t idx = add_node(&mem->std, &graph, type_index);
-                graph.nodes[idx].box = (quad_i32_t){{50, 50}, {200, 200}};
+                graph.nodes[idx].box = (quad_i32_t){{300, 10}, {200, 200}};
             }
         }
-
-        static bool b;
-        if (ui->checkbox("Thingy on", &b))
-        {
-            log_debug("The thingy is %s", b ? "on" : "off");
-        }
-
-        if (ui->checkbox("Thingy dingy", &b))
-        {
-            log_debug("The thingy is %s", b ? "on" : "off");
-        }
-
-        y = sinf(freq * t);
-        ui->slider("freq", &freq, 0.0f, 10.0f);
-        ui->slider("sin(freq * t)", &y, -1.0f, 1.0f);
 
         ui->end_frame();
 

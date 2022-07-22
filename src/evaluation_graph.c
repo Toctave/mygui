@@ -1,7 +1,9 @@
 #include "evaluation_graph.h"
 
 #include "assert.h"
+#include "memory.h"
 #include "stretchy_buffer.h"
+#include <stdint.h>
 
 void node_graph_init(mem_allocator_i* alloc, node_graph_t* graph)
 {
@@ -150,38 +152,46 @@ void connect_nodes(node_graph_t* graph,
     }
 }
 
-void stupid_evaluate(node_graph_t* graph,
-                     uint32_t node_index,
-                     uint32_t plug_index)
+void evaluate_schedule(node_graph_t* graph)
 {
-    ASSERT(!is_input(graph, node_index, plug_index));
-
-    node_plug_value_t inputs[MAX_PLUG_COUNT];
-    node_plug_value_t outputs[MAX_PLUG_COUNT];
-
-    node_t* node = array_safe_get(graph->nodes, node_index);
-    node_type_definition_t* type = get_node_type(graph, node_index);
-
-    for (uint32_t i = 0; i < type->input_count; i++)
+    for (uint32_t i = 1; i < array_count(graph->nodes); i++)
     {
-        if (node->plugs[i].connected_node)
+        uint32_t node_index = graph->schedule[i];
+
+        node_t* node = array_safe_get(graph->nodes, node_index);
+        node_type_definition_t* type = get_node_type(graph, node_index);
+
+        node_plug_value_t inputs[MAX_PLUG_COUNT];
+        node_plug_value_t outputs[MAX_PLUG_COUNT];
+
+        // get inputs from connected nodes, if any
+        for (uint32_t plug_index = 0; plug_index < type->input_count;
+             plug_index++)
         {
-            stupid_evaluate(graph,
-                            node->plugs[i].connected_node,
-                            node->plugs[i].connected_plug);
-            node->plugs[i].value = graph->nodes[node->plugs[i].connected_node]
-                                       .plugs[node->plugs[i].connected_plug]
-                                       .value;
+            node_plug_state_t* plug =
+                get_plug_state(graph, node_index, plug_index);
+            if (plug->connected_node)
+            {
+                plug->value = get_plug_state(graph,
+                                             plug->connected_node,
+                                             plug->connected_plug)
+                                  ->value;
+            }
+
+            inputs[plug_index] = plug->value;
         }
 
-        inputs[i] = node->plugs[i].value;
-    }
+        // call node evaluation function
+        type->evaluate(inputs, outputs);
 
-    type->evaluate(inputs, outputs);
-
-    for (uint32_t i = type->input_count; i < type->plug_count; i++)
-    {
-        node->plugs[i].value = outputs[i - type->input_count];
+        // collect the results back into the node's plugs
+        for (uint32_t plug_index = type->input_count;
+             plug_index < type->plug_count;
+             plug_index++)
+        {
+            node->plugs[plug_index].value =
+                outputs[plug_index - type->input_count];
+        }
     }
 }
 
@@ -192,4 +202,59 @@ get_plug_value(node_graph_t* graph, uint32_t node_index, uint32_t plug_index)
         &array_safe_get(graph->nodes, node_index)->plugs[plug_index];
 
     return &plug->value;
+}
+
+static void insert_into_schedule(node_graph_t* graph,
+                                 bool* scheduled,
+                                 uint32_t node_index,
+                                 uint32_t* scheduled_count)
+{
+    if (scheduled[node_index])
+    {
+        return;
+    }
+
+    node_type_definition_t* type = get_node_type(graph, node_index);
+
+    for (uint32_t plug_index = 0; plug_index < type->plug_count; plug_index++)
+    {
+        node_plug_state_t* plug = get_plug_state(graph, node_index, plug_index);
+
+        if (plug->connected_node)
+        {
+            insert_into_schedule(graph,
+                                 scheduled,
+                                 plug->connected_node,
+                                 scheduled_count);
+        }
+    }
+
+    graph->schedule[*scheduled_count] = node_index;
+    (*scheduled_count)++;
+
+    scheduled[node_index] = true;
+}
+
+void build_schedule(mem_allocator_i* alloc, node_graph_t* graph)
+{
+    uint32_t node_count = array_count(graph->nodes);
+    array_reserve(alloc, graph->schedule, node_count);
+
+    // TODO(octave) : could use a bitfield
+    bool* scheduled = mem_alloc(alloc, sizeof(bool) * node_count);
+
+    for (uint32_t i = 1; i < node_count; i++)
+    {
+        scheduled[i] = false;
+    }
+
+    uint32_t scheduled_count = 1;
+    for (uint32_t i = 1; i < node_count; i++)
+    {
+        insert_into_schedule(graph, scheduled, i, &scheduled_count);
+    }
+
+    ASSERT(scheduled_count == node_count);
+
+    mem_free(alloc, scheduled, sizeof(bool) * node_count);
 }

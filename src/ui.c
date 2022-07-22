@@ -643,6 +643,7 @@ static void load(void* api)
     ui_api->draw_line = draw_line;
     ui_api->draw_quad = draw_quad;
     ui_api->draw_text = draw_text;
+    ui_api->end_draw_region = end_draw_region;
     ui_api->end_frame = end_frame;
     ui_api->get_line_height = get_line_height;
     ui_api->get_mouse = get_mouse;

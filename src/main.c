@@ -148,14 +148,15 @@ static void test_eval_graph(mem_api* mem)
 
     connect_nodes(&graph, f, 2, g, 0);
 
-    int64_t* x = &get_input_value(&graph, f, 0)->integer;
-    int64_t* y = &get_input_value(&graph, f, 1)->integer;
-    int64_t* z = &get_input_value(&graph, g, 1)->integer;
+    int64_t* x = &get_plug_value(&graph, f, 0)->integer;
+    int64_t* y = &get_plug_value(&graph, f, 1)->integer;
+    int64_t* z = &get_plug_value(&graph, g, 1)->integer;
 
     *x = 43;
     *y = 25;
     *z = 4;
-    log_debug("result = %ld", stupid_evaluate(&graph, g, 2).integer);
+    stupid_evaluate(&graph, g, 2);
+    log_debug("result = %ld", get_plug_value(&graph, g, 2)->integer);
 }
 
 static quad_i32_t square(int32_t x, int32_t y, int32_t width)

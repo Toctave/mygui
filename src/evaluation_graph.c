@@ -143,8 +143,9 @@ void connect_nodes(node_graph_t* graph,
     }
 }
 
-node_plug_value_t
-stupid_evaluate(node_graph_t* graph, uint32_t node_index, uint32_t plug_index)
+void stupid_evaluate(node_graph_t* graph,
+                     uint32_t node_index,
+                     uint32_t plug_index)
 {
     ASSERT(!is_input(graph, node_index, plug_index));
 
@@ -158,9 +159,12 @@ stupid_evaluate(node_graph_t* graph, uint32_t node_index, uint32_t plug_index)
     {
         if (node->plugs[i].input_node)
         {
-            node->plugs[i].value = stupid_evaluate(graph,
-                                                   node->plugs[i].input_node,
-                                                   node->plugs[i].input_plug);
+            stupid_evaluate(graph,
+                            node->plugs[i].input_node,
+                            node->plugs[i].input_plug);
+            node->plugs[i].value = graph->nodes[node->plugs[i].input_node]
+                                       .plugs[node->plugs[i].input_plug]
+                                       .value;
         }
 
         inputs[i] = node->plugs[i].value;
@@ -172,19 +176,14 @@ stupid_evaluate(node_graph_t* graph, uint32_t node_index, uint32_t plug_index)
     {
         node->plugs[i].value = outputs[i - type->input_count];
     }
-
-    uint32_t output_index = plug_index - type->input_count;
-    return outputs[output_index];
 }
 
-node_plug_value_t* get_input_value(const node_graph_t* graph,
-                                   uint32_t node_index,
-                                   uint32_t plug_index)
+node_plug_value_t* get_plug_value(const node_graph_t* graph,
+                                  uint32_t node_index,
+                                  uint32_t plug_index)
 {
-    ASSERT(plug_index < get_node_type(graph, node_index)->input_count);
-    plug_state_t* input =
+    plug_state_t* plug =
         &array_safe_get(graph->nodes, node_index)->plugs[plug_index];
-    ASSERT(!input->input_node);
 
-    return &input->value;
+    return &plug->value;
 }

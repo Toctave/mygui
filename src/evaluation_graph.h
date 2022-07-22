@@ -61,9 +61,9 @@ typedef struct node_graph_t
     /* array */ node_t* nodes;
 } node_graph_t;
 
-node_plug_value_t* get_input_value(const node_graph_t* graph,
-                                   uint32_t node_index,
-                                   uint32_t plug_index);
+node_plug_value_t* get_plug_value(const node_graph_t* graph,
+                                  uint32_t node_index,
+                                  uint32_t plug_index);
 
 void node_graph_init(mem_allocator_i* alloc, node_graph_t* graph);
 uint32_t add_node_type(mem_allocator_i* alloc,
@@ -82,7 +82,8 @@ void connect_nodes(node_graph_t* graph,
                    uint32_t src_plug,
                    uint32_t dst_node,
                    uint32_t dst_plug);
-node_plug_value_t
-stupid_evaluate(node_graph_t* graph, uint32_t node_index, uint32_t plug_index);
+void stupid_evaluate(node_graph_t* graph,
+                     uint32_t node_index,
+                     uint32_t plug_index);
 
 bool is_input(const node_graph_t* graph, uint32_t node, uint32_t plug_index);

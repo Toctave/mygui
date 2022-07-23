@@ -106,7 +106,7 @@ void* load_plugin(const char* name, version_t version)
             plugin_spec_t* spec =
                 platform_get_symbol_address(found->lib, "PLUGIN_SPEC");
 
-            if (!spec)
+            if (!spec || !versions_compatible(version, spec->version))
             {
                 platform_close_shared_library(found->lib);
                 free_plugin(found);

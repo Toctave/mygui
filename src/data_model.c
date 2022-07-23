@@ -336,7 +336,7 @@ static void set_reference(database_o* db,
     }
 }
 
-static void delete_object(database_o* db, object_id_t id)
+static void destroy_object(database_o* db, object_id_t id)
 {
     object_t* object = get_object(db, id);
     if (!object)
@@ -360,7 +360,7 @@ static void delete_object(database_o* db, object_id_t id)
             object_id_t* sub_id =
                 (object_id_t*)((uint8_t*)object->data + prop->offset);
 
-            delete_object(db, *sub_id);
+            destroy_object(db, *sub_id);
         }
     }
 
@@ -374,7 +374,7 @@ static void delete_object(database_o* db, object_id_t id)
     db->objects[0].next_free = id.info.slot;
 }
 
-static object_id_t add_object(database_o* db, uint16_t type_index)
+static object_id_t create_object(database_o* db, uint16_t type_index)
 {
     if (type_index == 0 || type_index >= array_count(db->object_types))
     {
@@ -406,7 +406,7 @@ static object_id_t add_object(database_o* db, uint16_t type_index)
             object_id_t* sub_id =
                 (object_id_t*)((uint8_t*)object->data + prop->offset);
 
-            *sub_id = add_object(db, prop->def.object_type);
+            *sub_id = create_object(db, prop->def.object_type);
         }
     }
 
@@ -426,7 +426,8 @@ static void load(void* api)
     db->create = create;
     db->destroy = destroy;
     db->add_object_type = add_object_type;
-    db->add_object = add_object;
+    db->create_object = create_object;
+    db->destroy_object = destroy_object;
     db->get_sub_object = get_sub_object;
     db->get_reference = get_reference;
     db->set_reference = set_reference;

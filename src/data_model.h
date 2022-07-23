@@ -72,8 +72,8 @@ typedef struct database_api
     uint16_t (*add_object_type)(database_o* db,
                                 uint32_t property_count,
                                 property_definition_t* properties);
-    object_id_t (*add_object)(database_o* db, uint16_t type_index);
-    void (*delete_object)(database_o* db, object_id_t id);
+    object_id_t (*create_object)(database_o* db, uint16_t type_index);
+    void (*destroy_object)(database_o* db, object_id_t id);
 
     FOR_ALL_BASE_PROPERTY_TYPES(DO_DECLARE_GETTER_SETTER)
 

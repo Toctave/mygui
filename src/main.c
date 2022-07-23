@@ -90,8 +90,8 @@ static void test_db(mem_api* mem, database_api* db)
 
     log_debug("typ = %u", typ);
 
-    object_id_t nobj = db->add_object(mydb, ntyp);
-    object_id_t obj = db->add_object(mydb, typ);
+    object_id_t nobj = db->create_object(mydb, ntyp);
+    object_id_t obj = db->create_object(mydb, typ);
     blob_t my_blob = {-12, "123", 3.14f};
 
     db->reallocate_buffer(mydb, obj, "blob", sizeof(blob_t));
@@ -104,7 +104,7 @@ static void test_db(mem_api* mem, database_api* db)
     db->set_float64(mydb, obj, "x", 3.0);
     for (uint32_t i = 0; i < 100; i++)
     {
-        object_id_t id = db->add_object(mydb, typ);
+        object_id_t id = db->create_object(mydb, typ);
 
         log_debug("ID : %u %u %u\n",
                   id.info.type,

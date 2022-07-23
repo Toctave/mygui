@@ -9,11 +9,11 @@
 
 typedef struct mem_allocator_i mem_allocator_i;
 
-typedef struct buffer_t
+typedef struct blob_t
 {
     uint64_t size;
     void* data;
-} buffer_t;
+} blob_t;
 
 typedef struct property_layout_t
 {
@@ -88,8 +88,8 @@ static uint32_t property_size(const property_definition_t* property)
     switch (property->type)
     {
         FOR_ALL_BASE_PROPERTY_TYPES(DO_SIZE_SWITCH_CASE)
-    case PTYPE_BUFFER:
-        return sizeof(buffer_t);
+    case PTYPE_BLOB:
+        return sizeof(blob_t);
     case PTYPE_OBJECT:
         return sizeof(object_id_t);
     case PTYPE_REFERENCE:
@@ -222,12 +222,10 @@ static void* get_property_ptr(database_o* db,
 
 FOR_ALL_BASE_PROPERTY_TYPES(DO_DEFINE_GETTER_SETTER)
 
-static bool reallocate_buffer(database_o* db,
-                              object_id_t id,
-                              const char* name,
-                              uint64_t size)
+static bool
+reallocate_blob(database_o* db, object_id_t id, const char* name, uint64_t size)
 {
-    buffer_t* ptr = get_property_ptr(db, id, PTYPE_BUFFER, name);
+    blob_t* ptr = get_property_ptr(db, id, PTYPE_BLOB, name);
 
     if (ptr)
     {
@@ -242,14 +240,14 @@ static bool reallocate_buffer(database_o* db,
     }
 }
 
-static bool get_buffer_data(database_o* db,
-                            object_id_t id,
-                            const char* name,
-                            uint64_t offset,
-                            uint64_t size,
-                            void* data)
+static bool get_blob_data(database_o* db,
+                          object_id_t id,
+                          const char* name,
+                          uint64_t offset,
+                          uint64_t size,
+                          void* data)
 {
-    buffer_t* ptr = get_property_ptr(db, id, PTYPE_BUFFER, name);
+    blob_t* ptr = get_property_ptr(db, id, PTYPE_BLOB, name);
 
     if (!ptr || offset + size >= ptr->size)
     {
@@ -264,14 +262,14 @@ static bool get_buffer_data(database_o* db,
     }
 }
 
-static bool set_buffer_data(database_o* db,
-                            object_id_t id,
-                            const char* name,
-                            uint64_t offset,
-                            uint64_t size,
-                            const void* data)
+static bool set_blob_data(database_o* db,
+                          object_id_t id,
+                          const char* name,
+                          uint64_t offset,
+                          uint64_t size,
+                          const void* data)
 {
-    buffer_t* ptr = get_property_ptr(db, id, PTYPE_BUFFER, name);
+    blob_t* ptr = get_property_ptr(db, id, PTYPE_BLOB, name);
 
     if (!ptr || offset + size >= ptr->size)
     {
@@ -349,9 +347,9 @@ static void destroy_object(database_o* db, object_id_t id)
     for (uint32_t i = 0; i < type->property_count; i++)
     {
         property_layout_t* prop = &db->properties[type->first_property + i];
-        if (prop->def.type == PTYPE_BUFFER)
+        if (prop->def.type == PTYPE_BLOB)
         {
-            buffer_t* buf = (buffer_t*)((uint8_t*)object->data + prop->offset);
+            blob_t* buf = (blob_t*)((uint8_t*)object->data + prop->offset);
 
             mem_free(db->alloc, buf->data, buf->size);
         }
@@ -431,9 +429,9 @@ static void load(void* api)
     db->get_sub_object = get_sub_object;
     db->get_reference = get_reference;
     db->set_reference = set_reference;
-    db->reallocate_buffer = reallocate_buffer;
-    db->get_buffer_data = get_buffer_data;
-    db->set_buffer_data = set_buffer_data;
+    db->reallocate_blob = reallocate_blob;
+    db->get_blob_data = get_blob_data;
+    db->set_blob_data = set_blob_data;
 }
 
 plugin_spec_t PLUGIN_SPEC = {

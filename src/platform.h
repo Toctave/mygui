@@ -26,6 +26,8 @@ typedef struct platform_input_info_t
 
     uint32_t width;
     uint32_t height;
+
+    char typed_utf8[64]; // UTF-8
 } platform_input_info_t;
 
 typedef struct platform_file_o platform_file_o;

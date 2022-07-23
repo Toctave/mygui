@@ -1,6 +1,9 @@
 #include "platform.h"
 
+#include "assert.h"
+#include "logging.h"
 #include <GL/glx.h>
+#include <X11/X.h>
 #include <X11/Xlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,6 +13,7 @@ static Display* dpy;
 static Window window;
 static GLXWindow glxWindow;
 static Atom WM_DELETE_WINDOW;
+static XIC inputContext;
 
 #define FOR_ALL_GLX_FUNCTIONS(X)                                               \
     X(XCreateContextAttribsARB,                                                \
@@ -223,7 +227,7 @@ bool platform_init(const char* argv0,
 
     if (isGLXExtensionPresent(default_screen, "GLX_EXT_swap_control"))
     {
-        glXSwapIntervalEXT(dpy, glxWindow, 0);
+        glXSwapIntervalEXT(dpy, glxWindow, 1);
     }
     else
     {
@@ -268,14 +272,14 @@ bool platform_init(const char* argv0,
             fprintf(stderr, "Could not find matching input style.\n");
         }
 
-        XIC inputContext = XCreateIC(x_input_method,
-                                     XNInputStyle,
-                                     best_match_style,
-                                     XNClientWindow,
-                                     window,
-                                     XNFocusWindow,
-                                     window,
-                                     NULL);
+        inputContext = XCreateIC(x_input_method,
+                                 XNInputStyle,
+                                 best_match_style,
+                                 XNClientWindow,
+                                 window,
+                                 XNFocusWindow,
+                                 window,
+                                 NULL);
         if (!inputContext)
         {
             fprintf(stderr, "Could not create input context\n");
@@ -324,6 +328,9 @@ void platform_handle_input_events(platform_input_info_t* input)
     int32_t prev_x = input->mouse_x;
     int32_t prev_y = input->mouse_y;
 
+    uint32_t typed_size = 0;
+    static char prev_buffer[5];
+
     while (XPending(dpy))
     {
         XEvent evt;
@@ -357,8 +364,82 @@ void platform_handle_input_events(platform_input_info_t* input)
         case ButtonRelease:
             input->mouse_released |= button_mask(evt.xbutton.button);
             break;
+        case KeyPress:
+        case KeyRelease:
+        {
+            bool have_repeat = false;
+            // NOTE(octave) : if this is slow, might want to pass
+            // QueuedAlready or QueuedAfterReading
+            if (evt.type == KeyRelease && XEventsQueued(dpy, QueuedAfterFlush))
+            {
+                XEvent next_evt;
+                XPeekEvent(dpy, &next_evt);
+
+                if (next_evt.type == KeyPress
+                    && next_evt.xkey.time == evt.xkey.time
+                    && next_evt.xkey.keycode == evt.xkey.keycode)
+                {
+                    // it's a key repeat, pop the next event with it
+                    XNextEvent(dpy, &next_evt);
+                    have_repeat = true;
+                }
+            }
+
+            if (have_repeat)
+            {
+                for (int32_t i = 0; i < 4; i++)
+                {
+                    if (!prev_buffer[i])
+                    {
+                        break;
+                    }
+                    ASSERT(typed_size < sizeof(input->typed_utf8));
+                    input->typed_utf8[typed_size++] = prev_buffer[i];
+                }
+            }
+
+            if (evt.type == KeyPress)
+            {
+                Status status = 0;
+                KeySym keysym;
+                char buffer[5] = {0};
+                int bytes_read = Xutf8LookupString(inputContext,
+                                                   &evt.xkey,
+                                                   buffer,
+                                                   sizeof(buffer),
+                                                   &keysym,
+                                                   &status);
+
+                if (status == XBufferOverflow)
+                {
+                    log_error(
+                        "Buffer overflow while reading keyboard input.\n");
+                    break;
+                }
+
+                // bool have_keysym = (status == XLookupKeySym || status == XLookupBoth);
+
+                bool have_buffer =
+                    (status == XLookupChars || status == XLookupBoth);
+
+                if (have_buffer)
+                {
+                    for (int i = 0; i < bytes_read; i++)
+                    {
+                        ASSERT(typed_size < sizeof(input->typed_utf8));
+                        input->typed_utf8[typed_size++] = buffer[i];
+                    }
+
+                    memcpy(prev_buffer, buffer, sizeof(buffer));
+                }
+            }
+
+            break;
+        }
         }
     }
+
+    input->typed_utf8[typed_size] = 0;
 }
 
 void platform_swap_buffers() { glXSwapBuffers(dpy, glxWindow); }

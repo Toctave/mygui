@@ -11,6 +11,7 @@
 #include "util.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -34,6 +35,7 @@ static struct
     renderer_i* renderer;
 
     ui_mouse_t mouse;
+    uint8_t typed_utf8[64];
 
     int32_t cursor_x;
     int32_t cursor_y;
@@ -43,6 +45,7 @@ static struct
 
     uint64_t active_id;
     uint64_t hovered_id;
+    uint64_t focus_id;
 
     uint32_t drag_state;
     uint64_t drag_source_id;
@@ -139,8 +142,8 @@ static void begin_draw_region(int32_t x, int32_t y, int32_t w, int32_t h)
         .box = {.min = {x, y}, .extent = {w, h}},
     };
 
-    ui.cursor_x = x;
-    ui.cursor_y = y;
+    ui.cursor_x = x + ui.margin;
+    ui.cursor_y = y + ui.margin;
 }
 
 static void end_draw_region()
@@ -154,7 +157,7 @@ static void end_draw_region()
     ui.cursor_y = region->prev_cursor_y;
 }
 
-static float clamped_float(float t, float min, float max)
+static double clamped_double(double t, double min, double max)
 {
     if (t < min)
     {
@@ -310,7 +313,7 @@ static void new_line()
     ui.prev_cursor_x = ui.cursor_x;
     ui.prev_cursor_y = ui.cursor_y;
 
-    ui.cursor_x = current_region()->box.min[0];
+    ui.cursor_x = current_region()->box.min[0] + ui.margin;
     ui.cursor_y += ui.line_height + ui.margin;
 }
 
@@ -340,10 +343,14 @@ static void draw_hover_and_active_overlay(int32_t x,
 static int32_t remaining_region_x()
 {
     return current_region()->box.min[0] + current_region()->box.extent[0]
-           - ui.cursor_x - ui.margin;
+           - ui.cursor_x;
 }
 
-static bool slider(const char* txt, float* value, float min, float max)
+static bool slider_ex(const char* txt,
+                      double* value,
+                      double min,
+                      double max,
+                      const char* format)
 {
     push_string_id(txt);
 
@@ -352,17 +359,22 @@ static bool slider(const char* txt, float* value, float min, float max)
     int32_t box_x = ui.cursor_x;
     int32_t box_y = ui.cursor_y;
 
-    float range = max - min;
-    bool finiteRange = range < INFINITY;
-    float unitsToPixels = finiteRange ? box_width / range : 1.0f;
+    double range = max - min;
+    bool finiteRange = range > 0 && range < INFINITY;
+    double unitsToPixels = finiteRange ? box_width / range : 1.0;
 
     bool changed = false;
 
     int32_t dx;
     if (drag_rect_x(box_x, box_y, box_width, box_height, &dx))
     {
-        *value += (float)dx / unitsToPixels;
-        *value = clamped_float(*value, min, max);
+        *value += (double)dx / unitsToPixels;
+        changed = true;
+    }
+
+    if (min < max)
+    {
+        *value = clamped_double(*value, min, max);
     }
 
     draw_quad((quad_i32_t){{box_x, box_y}, {box_width, box_height}},
@@ -370,14 +382,14 @@ static bool slider(const char* txt, float* value, float min, float max)
     if (finiteRange)
     {
         int32_t slider_position =
-            unitsToPixels * (clamped_float(*value, min, max) - min);
+            unitsToPixels * (clamped_double(*value, min, max) - min);
 
         draw_quad((quad_i32_t){{box_x, box_y}, {slider_position, box_height}},
                   ui.colors[UI_COLOR_MAIN]);
     }
 
     char value_txt[256];
-    snprintf(value_txt, sizeof(value_txt), "%.3f", *value);
+    snprintf(value_txt, sizeof(value_txt), format, *value);
 
     draw_text(value_txt, box_x, box_y);
 
@@ -388,6 +400,29 @@ static bool slider(const char* txt, float* value, float min, float max)
     new_line();
 
     return changed;
+}
+
+static bool slider_float(const char* txt, float* value, float min, float max)
+{
+    double v = *value;
+
+    bool result = slider_ex(txt, &v, min, max, "%.3f");
+
+    *value = v;
+
+    return result;
+}
+
+static bool
+slider_int(const char* txt, int32_t* value, int32_t min, int32_t max)
+{
+    double v = *value;
+
+    bool result = slider_ex(txt, &v, min, max, "%.0f");
+
+    *value = v;
+
+    return result;
 }
 
 static int32_t get_text_width(const char* txt)
@@ -456,6 +491,158 @@ static bool checkbox(const char* txt, bool* value)
     return clicked;
 }
 
+static uint32_t decode_utf8_code_point(uint8_t* bytes, uint32_t* result)
+{
+    if (!*bytes)
+    {
+        return 0;
+    }
+
+    uint32_t trash;
+    if (!result)
+    {
+        result = &trash;
+    }
+
+    uint32_t i = 0;
+    enum
+    {
+        START,
+        NEED_3_BYTES,
+        NEED_2_BYTES,
+        NEED_1_BYTE,
+        DONE,
+    };
+
+    uint32_t state = START;
+    *result = 0;
+
+    while (state != DONE)
+    {
+        uint8_t byte = bytes[i++];
+
+        bool bit7 = byte & (1 << 7);
+        bool bit6 = byte & (1 << 6);
+        bool bit5 = byte & (1 << 5);
+        bool bit4 = byte & (1 << 4);
+        bool bit3 = byte & (1 << 3);
+
+        switch (state)
+        {
+        case START:
+            if (bit7)
+            {
+                ASSERT(bit6);
+                if (bit5)
+                {
+                    if (bit4)
+                    {
+                        ASSERT(!bit3);
+                        // 11110...
+                        state = NEED_3_BYTES;
+                        *result = (byte & 0b111) << 18;
+                    }
+                    else
+                    {
+                        // 1110....
+                        state = NEED_2_BYTES;
+                        *result = (byte & 0b1111) << 12;
+                    }
+                }
+                else
+                {
+                    // 110.....
+                    state = NEED_1_BYTE;
+                    *result = (byte & 0b11111) << 6;
+                }
+            }
+            else
+            {
+                // 0.......
+                *result = byte;
+                state = DONE;
+            }
+            break;
+        case NEED_3_BYTES:
+            ASSERT(bit7 && !bit6);
+            *result |= (byte & 0b111111) << 12;
+            state = NEED_2_BYTES;
+            break;
+        case NEED_2_BYTES:
+            ASSERT(bit7 && !bit6);
+            *result |= (byte & 0b111111) << 6;
+            state = NEED_1_BYTE;
+        case NEED_1_BYTE:
+            ASSERT(bit7 && !bit6);
+            *result |= (byte & 0b111111) << 0;
+            state = DONE;
+        case DONE:
+            break;
+        }
+    }
+
+    return i;
+}
+
+static void text_box(const char* label, char* buffer, uint32_t size)
+{
+    push_string_id(label);
+
+    int32_t width = remaining_region_x();
+
+    int32_t height = ui.line_height;
+    int32_t x = ui.cursor_x;
+    int32_t y = ui.cursor_y;
+
+    bool clicked = hold_rect(x, y, width, height);
+
+    if (ui.focus_id == current_id())
+    {
+        uint32_t cursor = 0;
+        while (buffer[cursor] && cursor < size - 1)
+        {
+            cursor++;
+        }
+
+        uint8_t* typed = ui.typed_utf8;
+        uint32_t i = 0;
+        uint32_t code_point;
+        uint32_t bytes;
+
+        while ((bytes = decode_utf8_code_point(typed, &code_point)))
+        {
+            if (code_point == 8) // backspace
+            {
+                if (cursor > 0)
+                {
+                    buffer[--cursor] = '\0';
+                }
+            }
+            else if (bytes <= size - 1 - cursor)
+            {
+                memcpy(&buffer[cursor], typed, bytes);
+            }
+            else
+            {
+                break;
+            }
+
+            typed += bytes;
+        }
+    }
+
+    quad_i32_t pos_quad = {{x, y}, {width, height}};
+    draw_quad(pos_quad, ui.colors[UI_COLOR_MAIN]);
+
+    draw_text(buffer, x, y);
+
+    draw_hover_and_active_overlay(x, y, width, height);
+
+    pop_id();
+
+    new_line();
+}
+
 static void text(const char* txt)
 {
     draw_text(txt, ui.cursor_x, ui.cursor_y);
@@ -495,7 +682,10 @@ static void terminate()
 
 static void begin_frame(const platform_input_info_t* input)
 {
-    begin_draw_region(ui.margin, ui.margin, 200, INT32_MAX);
+    begin_draw_region(0, 0, 200, INT32_MAX);
+
+    ASSERT(sizeof(ui.typed_utf8) == sizeof(input->typed_utf8));
+    memcpy(ui.typed_utf8, input->typed_utf8, sizeof(ui.typed_utf8));
 
     ui.mouse.x = input->mouse_x;
     ui.mouse.dx = input->mouse_dx;
@@ -524,6 +714,15 @@ static void end_frame()
         ui.drag_state = DRAG_DROP_NONE;
         ui.drag_source_id = 0;
         ui.drag_payload = 0;
+    }
+
+    if (ui.active_id)
+    {
+        ui.focus_id = ui.active_id;
+    }
+    else if (!ui.hovered_id && ui.mouse.pressed & MOUSE_BUTTON_LEFT)
+    {
+        ui.focus_id = 0;
     }
 }
 
@@ -560,9 +759,11 @@ static void load(void* api)
     ui_api->push_id = push_id;
     ui_api->push_string_id = push_string_id;
     ui_api->same_line = same_line;
-    ui_api->slider = slider;
+    ui_api->slider_float = slider_float;
+    ui_api->slider_int = slider_int;
     ui_api->terminate = terminate;
     ui_api->text = text;
+    ui_api->text_box = text_box;
 }
 
 plugin_spec_t PLUGIN_SPEC = {

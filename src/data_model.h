@@ -28,7 +28,7 @@ typedef enum property_type_e
     FOR_ALL_BASE_PROPERTY_TYPES(DO_BASE_TYPE_ENUM)
     // clang-format on
 
-    PTYPE_BUFFER,
+    PTYPE_BLOB,
     PTYPE_OBJECT,
     PTYPE_REFERENCE,
 } property_type_e;
@@ -89,20 +89,20 @@ typedef struct database_api
                                  object_id_t id,
                                  const char* name);
 
-    bool (*reallocate_buffer)(database_o* db,
-                              object_id_t id,
-                              const char* name,
-                              uint64_t size);
-    bool (*get_buffer_data)(database_o* db,
+    bool (*reallocate_blob)(database_o* db,
                             object_id_t id,
                             const char* name,
-                            uint64_t offset,
-                            uint64_t size,
-                            void* data);
-    bool (*set_buffer_data)(database_o* db,
-                            object_id_t id,
-                            const char* name,
-                            uint64_t offset,
-                            uint64_t size,
-                            const void* data);
+                            uint64_t size);
+    bool (*get_blob_data)(database_o* db,
+                          object_id_t id,
+                          const char* name,
+                          uint64_t offset,
+                          uint64_t size,
+                          void* data);
+    bool (*set_blob_data)(database_o* db,
+                          object_id_t id,
+                          const char* name,
+                          uint64_t offset,
+                          uint64_t size,
+                          const void* data);
 } database_api;

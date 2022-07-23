@@ -73,9 +73,14 @@ typedef struct oui_api
     void (*new_line)();
 
     void (*text)(const char* txt);
-    bool (*slider)(const char* txt, float* value, float min, float max);
+    bool (*slider_float)(const char* txt, float* value, float min, float max);
+    bool (*slider_int)(const char* txt,
+                       int32_t* value,
+                       int32_t min,
+                       int32_t max);
     bool (*button)(const char* txt);
     bool (*checkbox)(const char* txt, bool* value);
+    void (*text_box)(const char* label, char* buffer, uint32_t size);
 
     bool (*drag_and_drop_source)(const void* payload, uint32_t size);
     bool (*drag_and_drop_target)(void* payload, uint32_t size);

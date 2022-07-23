@@ -77,7 +77,7 @@ static void test_db(mem_api* mem, database_api* db)
         {.name = "active", .type = PTYPE_BOOL},
         {.name = "x", .type = PTYPE_FLOAT64},
         {.name = "y", .type = PTYPE_FLOAT64},
-        {.name = "blob", .type = PTYPE_BUFFER},
+        {.name = "blob", .type = PTYPE_BLOB},
     };
     uint16_t typ = db->add_object_type(mydb, STATIC_ARRAY_COUNT(props), props);
 
@@ -94,12 +94,12 @@ static void test_db(mem_api* mem, database_api* db)
     object_id_t obj = db->create_object(mydb, typ);
     blob_t my_blob = {-12, "123", 3.14f};
 
-    db->reallocate_buffer(mydb, obj, "blob", sizeof(blob_t));
-    db->set_buffer_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
+    db->reallocate_blob(mydb, obj, "blob", sizeof(blob_t));
+    db->set_blob_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
 
     object_id_t obj2 = db->get_sub_object(mydb, nobj, "subobject");
-    db->reallocate_buffer(mydb, obj2, "blob", sizeof(blob_t));
-    db->set_buffer_data(mydb, obj2, "blob", 0, sizeof(blob_t), &my_blob);
+    db->reallocate_blob(mydb, obj2, "blob", sizeof(blob_t));
+    db->set_blob_data(mydb, obj2, "blob", 0, sizeof(blob_t), &my_blob);
 
     db->set_float64(mydb, obj, "x", 3.0);
     for (uint32_t i = 0; i < 100; i++)
@@ -112,7 +112,7 @@ static void test_db(mem_api* mem, database_api* db)
                   id.info.slot);
     }
     log_debug("obj.x = %g", db->get_float64(mydb, obj, "x"));
-    db->get_buffer_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
+    db->get_blob_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
     log_debug("obj.blob = { .u = %d, .w = \"%s\", .x = %f }",
               my_blob.u,
               my_blob.w,
@@ -210,8 +210,8 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         node->box.extent[1] =
             (line_height + ui_margin) * (type->plug_count + 1);
 
-        ui->begin_draw_region(node->box.min[0],
-                              node->box.min[1],
+        ui->begin_draw_region(node->box.min[0] - ui_margin,
+                              node->box.min[1] - ui_margin,
                               node->box.extent[0],
                               node->box.extent[1]);
 
@@ -229,8 +229,8 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
         ui->text(title);
 
         uint32_t plugs_margin = 5;
-        ui->begin_draw_region(ui->get_cursor_x() + plugs_margin,
-                              ui->get_cursor_y(),
+        ui->begin_draw_region(ui->get_cursor_x() + plugs_margin - ui_margin,
+                              ui->get_cursor_y() - ui_margin,
                               node->box.extent[0] - 2 * plugs_margin,
                               node->box.extent[1] - 2 * ui_margin);
 
@@ -313,7 +313,10 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
             case PLUG_FLOAT:
             {
                 float u = val->floating;
-                ui->slider(type->plugs[plug].name, &u, -INFINITY, INFINITY);
+                ui->slider_float(type->plugs[plug].name,
+                                 &u,
+                                 -INFINITY,
+                                 INFINITY);
                 ui->same_line();
 
                 val->floating = u;
@@ -321,8 +324,8 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
             break;
             case PLUG_INTEGER:
             {
-                float u = val->integer;
-                ui->slider(type->plugs[plug].name, &u, -INFINITY, INFINITY);
+                int32_t u = val->integer;
+                ui->slider_int(type->plugs[plug].name, &u, 0, 0);
                 ui->same_line();
 
                 val->integer = u;
@@ -579,6 +582,11 @@ int main(int argc, const char** argv)
 
         platform_handle_input_events(&input);
 
+        if (input.typed_utf8[0])
+        {
+            log_debug("Typed : %s", input.typed_utf8);
+        }
+
         ui->begin_frame(&input);
 
         graph_ui(ui, &graph);
@@ -603,6 +611,9 @@ int main(int argc, const char** argv)
                 graph.nodes[idx].box = (quad_i32_t){{300, 10}, {200, 200}};
             }
         }
+
+        static char buffer[64] = {0};
+        ui->text_box("Test", buffer, sizeof(buffer));
 
         ui->end_frame();
 

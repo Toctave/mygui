@@ -548,18 +548,31 @@ void platform_handle_input_events(platform_input_info_t* input)
                 if (evt.type == KeyPress)
                 {
                     set_bit(input->keys_pressed, key_enum);
-                    set_bit(input->keys_down, key_enum);
                 }
 
                 if (evt.type == KeyRelease)
                 {
                     set_bit(input->keys_released, key_enum);
-                    clear_bit(input->keys_down, key_enum);
                 }
             }
 
             break;
         }
+        }
+    }
+
+    uint8_t x11_keys_down[32];
+    XQueryKeymap(dpy, (char*)x11_keys_down);
+
+    memset(input->keys_down, 0, KEYBOARD_BITFIELD_BYTES);
+    for (uint32_t keycode = 0;
+         keycode < STATIC_ARRAY_COUNT(x11_keycode_to_key_enum);
+         keycode++)
+    {
+        if (get_bit(x11_keys_down, keycode))
+        {
+            uint8_t key_enum = x11_keycode_to_key_enum[keycode];
+            set_bit(input->keys_down, key_enum);
         }
     }
 

@@ -567,7 +567,7 @@ static void load(void* api)
 
 plugin_spec_t PLUGIN_SPEC = {
     .name = "oui",
-    .version = {1, 0, 0},
+    .version = {0, 0, 1},
     .load = load,
     .api_size = sizeof(oui_api),
 };

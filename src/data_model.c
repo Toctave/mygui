@@ -79,16 +79,15 @@ static void destroy(database_o* db)
     mem_free(db->alloc, db, sizeof(database_o));
 }
 
+#define DO_SIZE_SWITCH_CASE(upper, lower, type)                                \
+    case PTYPE_##upper:                                                        \
+        return sizeof(type);
+
 static uint32_t property_size(const property_definition_t* property)
 {
     switch (property->type)
     {
-    case PTYPE_BOOL:
-        return 1;
-    case PTYPE_INTEGER:
-        return 8;
-    case PTYPE_FLOATING:
-        return 8;
+        FOR_ALL_BASE_PROPERTY_TYPES(DO_SIZE_SWITCH_CASE)
     case PTYPE_BUFFER:
         return sizeof(buffer_t);
     case PTYPE_OBJECT:
@@ -202,65 +201,26 @@ static void* get_property_ptr(database_o* db,
     return get_property_ptr_full(db, id, property_type, 0, name);
 }
 
-static double get_float(database_o* db, object_id_t id, const char* name)
-{
-    double* ptr = get_property_ptr(db, id, PTYPE_FLOATING, name);
+#define DO_DEFINE_GETTER_SETTER(upper, lower, type)                            \
+    static type get_##lower(database_o* db,                                    \
+                            object_id_t object,                                \
+                            const char* name)                                  \
+    {                                                                          \
+        type* ptr = get_property_ptr(db, object, PTYPE_##upper, name);         \
+        ASSERT(ptr);                                                           \
+        return *ptr;                                                           \
+    }                                                                          \
+    static void set_##lower(database_o* db,                                    \
+                            object_id_t object,                                \
+                            const char* name,                                  \
+                            type value)                                        \
+    {                                                                          \
+        type* ptr = get_property_ptr(db, object, PTYPE_##upper, name);         \
+        ASSERT(ptr);                                                           \
+        *ptr = value;                                                          \
+    }
 
-    if (!ptr)
-    {
-        // TODO(octave) : error handling.
-        return 0.;
-    }
-    else
-    {
-        return *ptr;
-    }
-}
-
-static void
-set_float(database_o* db, object_id_t id, const char* name, double value)
-{
-    double* ptr = get_property_ptr(db, id, PTYPE_FLOATING, name);
-
-    if (!ptr)
-    {
-        // TODO(octave) : error handling.
-    }
-    else
-    {
-        *ptr = value;
-    }
-}
-
-static int64_t get_int(database_o* db, object_id_t id, const char* name)
-{
-    int64_t* ptr = get_property_ptr(db, id, PTYPE_INTEGER, name);
-
-    if (!ptr)
-    {
-        // TODO(octave) : error handling.
-        return 0;
-    }
-    else
-    {
-        return *ptr;
-    }
-}
-
-static void
-set_int(database_o* db, object_id_t id, const char* name, int64_t value)
-{
-    int64_t* ptr = get_property_ptr(db, id, PTYPE_INTEGER, name);
-
-    if (!ptr)
-    {
-        // TODO(octave) : error handling.
-    }
-    else
-    {
-        *ptr = value;
-    }
-}
+FOR_ALL_BASE_PROPERTY_TYPES(DO_DEFINE_GETTER_SETTER)
 
 static bool reallocate_buffer(database_o* db,
                               object_id_t id,
@@ -453,19 +413,20 @@ static object_id_t add_object(database_o* db, uint16_t type_index)
     return object->id;
 }
 
+#define DO_ASSIGN_GETTER_SETTER(upper, lower, type)                            \
+    db->set_##lower = set_##lower;                                             \
+    db->get_##lower = get_##lower;
+
 static void load(void* api)
 {
     database_api* db = api;
+
+    FOR_ALL_BASE_PROPERTY_TYPES(DO_ASSIGN_GETTER_SETTER)
 
     db->create = create;
     db->destroy = destroy;
     db->add_object_type = add_object_type;
     db->add_object = add_object;
-    db->delete_object = delete_object;
-    db->get_float = get_float;
-    db->set_float = set_float;
-    db->get_int = get_int;
-    db->set_int = set_int;
     db->get_sub_object = get_sub_object;
     db->get_reference = get_reference;
     db->set_reference = set_reference;
@@ -476,7 +437,7 @@ static void load(void* api)
 
 plugin_spec_t PLUGIN_SPEC = {
     .name = "database",
-    .version = {0, 0, 1},
+    .version = {0, 0, 2},
     .load = load,
     .api_size = sizeof(database_api),
 };

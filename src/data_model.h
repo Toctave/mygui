@@ -5,12 +5,29 @@
 typedef struct database_o database_o;
 typedef struct mem_allocator_i mem_allocator_i;
 
+#define FOR_ALL_BASE_PROPERTY_TYPES(X)                                         \
+    X(BOOL, bool, bool)                                                        \
+    X(INT8, int8, int8_t)                                                      \
+    X(INT16, int16, int16_t)                                                   \
+    X(INT32, int32, int32_t)                                                   \
+    X(INT64, int64, int64_t)                                                   \
+    X(UINT8, uint8, uint8_t)                                                   \
+    X(UINT16, uint16, uint16_t)                                                \
+    X(UINT32, uint32, uint32_t)                                                \
+    X(UINT64, uint64, uint64_t)                                                \
+    X(FLOAT32, float32, float)                                                 \
+    X(FLOAT64, float64, double)
+
+#define DO_BASE_TYPE_ENUM(upper, lower, type) PTYPE_##upper,
+
 typedef enum property_type_e
 {
     PTYPE_NONE,
-    PTYPE_BOOL,
-    PTYPE_INTEGER,
-    PTYPE_FLOATING,
+
+    // clang-format off
+    FOR_ALL_BASE_PROPERTY_TYPES(DO_BASE_TYPE_ENUM)
+    // clang-format on
+
     PTYPE_BUFFER,
     PTYPE_OBJECT,
     PTYPE_REFERENCE,
@@ -39,6 +56,14 @@ typedef union object_id_t
     } info;
 } object_id_t;
 
+#define DO_DECLARE_GETTER_SETTER(upper, lower, type)                           \
+    type (                                                                     \
+        *get_##lower)(database_o * db, object_id_t object, const char* name);  \
+    void (*set_##lower)(database_o * db,                                       \
+                        object_id_t object,                                    \
+                        const char* name,                                      \
+                        type value);
+
 typedef struct database_api
 {
     database_o* (*create)(mem_allocator_i* alloc);
@@ -50,16 +75,7 @@ typedef struct database_api
     object_id_t (*add_object)(database_o* db, uint16_t type_index);
     void (*delete_object)(database_o* db, object_id_t id);
 
-    double (*get_float)(database_o* db, object_id_t object, const char* name);
-    void (*set_float)(database_o* db,
-                      object_id_t object,
-                      const char* name,
-                      double value);
-    int64_t (*get_int)(database_o* db, object_id_t id, const char* name);
-    void (*set_int)(database_o* db,
-                    object_id_t id,
-                    const char* name,
-                    int64_t value);
+    FOR_ALL_BASE_PROPERTY_TYPES(DO_DECLARE_GETTER_SETTER)
 
     object_id_t (*get_sub_object)(database_o* db,
                                   object_id_t id,

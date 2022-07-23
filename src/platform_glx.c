@@ -2,6 +2,7 @@
 
 #include "assert.h"
 #include "logging.h"
+#include "util.h"
 #include <GL/glx.h>
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -14,6 +15,112 @@ static Window window;
 static GLXWindow glxWindow;
 static Atom WM_DELETE_WINDOW;
 static XIC inputContext;
+
+// TODO(octave) : bulletproof this
+static uint8_t x11_keycode_to_key_enum[256] = {
+    [9] = KEY_ESCAPE,
+    [10] = KEY_1,
+    [11] = KEY_2,
+    [12] = KEY_3,
+    [13] = KEY_4,
+    [14] = KEY_5,
+    [15] = KEY_6,
+    [16] = KEY_7,
+    [17] = KEY_8,
+    [18] = KEY_9,
+    [19] = KEY_0,
+    [20] = KEY_MINUS,
+    [21] = KEY_EQUALS,
+    [22] = KEY_BACKSPACE,
+    [23] = KEY_TAB,
+    [24] = KEY_Q,
+    [25] = KEY_W,
+    [26] = KEY_E,
+    [27] = KEY_R,
+    [28] = KEY_T,
+    [29] = KEY_Y,
+    [30] = KEY_U,
+    [31] = KEY_I,
+    [32] = KEY_O,
+    [33] = KEY_P,
+    [34] = KEY_LEFT_BRACKET,
+    [35] = KEY_RIGHT_BRACKET,
+    [36] = KEY_RETURN,
+    [37] = KEY_LEFT_CONTROL,
+    [38] = KEY_A,
+    [39] = KEY_S,
+    [40] = KEY_D,
+    [41] = KEY_F,
+    [42] = KEY_G,
+    [43] = KEY_H,
+    [44] = KEY_J,
+    [45] = KEY_K,
+    [46] = KEY_L,
+    [47] = KEY_SEMICOLON,
+    [48] = KEY_APOSTROPHE,
+    [49] = KEY_GRAVE_ACCENT,
+    [50] = KEY_LEFT_SHIFT,
+    [51] = KEY_BACKSLASH,
+    [52] = KEY_Z,
+    [53] = KEY_X,
+    [54] = KEY_C,
+    [55] = KEY_V,
+    [56] = KEY_B,
+    [57] = KEY_N,
+    [58] = KEY_M,
+    [59] = KEY_COMMA,
+    [60] = KEY_PERIOD,
+    [61] = KEY_SLASH,
+    [62] = KEY_RIGHT_SHIFT,
+    [63] = KEY_KP_STAR,
+    [64] = KEY_LEFT_ALT,
+    [65] = KEY_SPACE,
+    [66] = KEY_ESCAPE,
+    [67] = KEY_F1,
+    [68] = KEY_F2,
+    [69] = KEY_F3,
+    [70] = KEY_F4,
+    [71] = KEY_F5,
+    [72] = KEY_F6,
+    [73] = KEY_F7,
+    [74] = KEY_F8,
+    [75] = KEY_F9,
+    [76] = KEY_F10,
+    [77] = KEY_NUM_LOCK,
+    [78] = KEY_SCROLL_LOCK,
+    [79] = KEY_KP_7,
+    [80] = KEY_KP_8,
+    [81] = KEY_KP_9,
+    [82] = KEY_KP_MINUS,
+    [83] = KEY_KP_4,
+    [84] = KEY_KP_5,
+    [85] = KEY_KP_6,
+    [86] = KEY_KP_PLUS,
+    [87] = KEY_KP_1,
+    [88] = KEY_KP_2,
+    [89] = KEY_KP_3,
+    [90] = KEY_KP_0,
+    [91] = KEY_KP_PERIOD,
+    [95] = KEY_F11,
+    [96] = KEY_F12,
+    [104] = KEY_KP_ENTER,
+    [105] = KEY_RIGHT_CONTROL,
+    [106] = KEY_KP_SLASH,
+    [107] = KEY_PRINT_SCREEN,
+    [108] = KEY_RIGHT_ALT,
+    [110] = KEY_HOME,
+    [111] = KEY_UP_ARROW,
+    [112] = KEY_PAGE_UP,
+    [113] = KEY_LEFT_ARROW,
+    [114] = KEY_RIGHT_ARROW,
+    [115] = KEY_END,
+    [116] = KEY_DOWN_ARROW,
+    [117] = KEY_PAGE_DOWN,
+    [118] = KEY_INSERT,
+    [119] = KEY_DELETE,
+    [127] = KEY_PAUSE,
+    [133] = KEY_SUPER,
+};
 
 #define FOR_ALL_GLX_FUNCTIONS(X)                                               \
     X(XCreateContextAttribsARB,                                                \
@@ -311,8 +418,6 @@ static uint32_t button_mask(int index)
 
 void platform_handle_input_events(platform_input_info_t* input)
 {
-    /* memset(input, 0, sizeof(*input)); */
-
     XWindowAttributes attrs;
     XGetWindowAttributes(dpy, window, &attrs);
 
@@ -330,6 +435,9 @@ void platform_handle_input_events(platform_input_info_t* input)
 
     uint32_t typed_size = 0;
     static char prev_buffer[5];
+
+    memset(input->keys_pressed, 0, KEYBOARD_BITFIELD_BYTES);
+    memset(input->keys_released, 0, KEYBOARD_BITFIELD_BYTES);
 
     while (XPending(dpy))
     {
@@ -367,7 +475,7 @@ void platform_handle_input_events(platform_input_info_t* input)
         case KeyPress:
         case KeyRelease:
         {
-            bool have_repeat = false;
+            bool is_repeat = false;
             // NOTE(octave) : if this is slow, might want to pass
             // QueuedAlready or QueuedAfterReading
             if (evt.type == KeyRelease && XEventsQueued(dpy, QueuedAfterFlush))
@@ -381,11 +489,11 @@ void platform_handle_input_events(platform_input_info_t* input)
                 {
                     // it's a key repeat, pop the next event with it
                     XNextEvent(dpy, &next_evt);
-                    have_repeat = true;
+                    is_repeat = true;
                 }
             }
 
-            if (have_repeat)
+            if (is_repeat)
             {
                 for (int32_t i = 0; i < 4; i++)
                 {
@@ -431,6 +539,22 @@ void platform_handle_input_events(platform_input_info_t* input)
                     }
 
                     memcpy(prev_buffer, buffer, sizeof(buffer));
+                }
+            }
+
+            if (!is_repeat)
+            {
+                uint8_t key_enum = x11_keycode_to_key_enum[evt.xkey.keycode];
+                if (evt.type == KeyPress)
+                {
+                    set_bit(input->keys_pressed, key_enum);
+                    set_bit(input->keys_down, key_enum);
+                }
+
+                if (evt.type == KeyRelease)
+                {
+                    set_bit(input->keys_released, key_enum);
+                    clear_bit(input->keys_down, key_enum);
                 }
             }
 

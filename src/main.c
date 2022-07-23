@@ -582,9 +582,20 @@ int main(int argc, const char** argv)
 
         platform_handle_input_events(&input);
 
-        if (input.typed_utf8[0])
+        for (uint8_t key = 0; key < KEY_COUNT; key++)
         {
-            log_debug("Typed : %s", input.typed_utf8);
+            if (get_bit(input.keys_pressed, key))
+            {
+                log_debug("Pressed : %s\n", KEY_NAMES[key]);
+            }
+            if (get_bit(input.keys_down, key))
+            {
+                log_debug("Down : %s\n", KEY_NAMES[key]);
+            }
+            if (get_bit(input.keys_released, key))
+            {
+                log_debug("Released : %s\n", KEY_NAMES[key]);
+            }
         }
 
         ui->begin_frame(&input);

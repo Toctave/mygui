@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base_types.h"
 #include <stdarg.h>
 
 typedef struct mem_api mem_api;
@@ -24,3 +25,27 @@ char* vtprintf(mem_api* mem,
                const char* fmt,
                va_list args);
 char* tprintf(mem_api* mem, mem_stack_allocator_o* stack, const char* fmt, ...);
+
+static inline void set_bit(uint8_t* bytes, uint32_t index)
+{
+    uint32_t i = index / 8;
+    uint32_t m = 1 << (index % 8);
+
+    bytes[i] |= m;
+}
+
+static inline void clear_bit(uint8_t* bytes, uint32_t index)
+{
+    uint32_t i = index / 8;
+    uint32_t m = 1 << (index % 8);
+
+    bytes[i] &= ~m;
+}
+
+static inline bool get_bit(uint8_t* bytes, uint32_t index)
+{
+    uint32_t i = index / 8;
+    uint32_t m = 1 << (index % 8);
+
+    return bytes[i] & m;
+}

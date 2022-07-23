@@ -3,6 +3,8 @@
 #include "base_types.h"
 #include "opengl_functions.h"
 
+#include "platform_keyboard.h"
+
 extern char EXECUTABLE_PATH[1024];
 
 enum
@@ -11,6 +13,8 @@ enum
     MOUSE_BUTTON_MIDDLE = 1 << 1,
     MOUSE_BUTTON_RIGHT = 1 << 2,
 };
+
+#define KEYBOARD_BITFIELD_BYTES ((KEY_COUNT - 1) / 8 + 1)
 
 typedef struct platform_input_info_t
 {
@@ -26,6 +30,10 @@ typedef struct platform_input_info_t
 
     uint32_t width;
     uint32_t height;
+
+    uint8_t keys_pressed[KEYBOARD_BITFIELD_BYTES];
+    uint8_t keys_released[KEYBOARD_BITFIELD_BYTES];
+    uint8_t keys_down[KEYBOARD_BITFIELD_BYTES];
 
     char typed_utf8[64]; // UTF-8
 } platform_input_info_t;
@@ -67,3 +75,4 @@ typedef struct platform_file_event_t
 
 uint64_t platform_watch_file(const char* path);
 bool platform_poll_file_event(platform_file_event_t* event);
+

@@ -14,6 +14,7 @@ src/logging.c
 src/main.c
 src/memory.c
 src/platform_glx.c
+src/platform_keyboard.c
 src/platform_linux.c
 src/plugin_manager.c
 src/stretchy_buffer.c

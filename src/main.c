@@ -75,8 +75,8 @@ static void test_db(mem_api* mem, database_api* db)
 
     property_definition_t props[] = {
         {.name = "active", .type = PTYPE_BOOL},
-        {.name = "x", .type = PTYPE_FLOATING},
-        {.name = "y", .type = PTYPE_FLOATING},
+        {.name = "x", .type = PTYPE_FLOAT64},
+        {.name = "y", .type = PTYPE_FLOAT64},
         {.name = "blob", .type = PTYPE_BUFFER},
     };
     uint16_t typ = db->add_object_type(mydb, STATIC_ARRAY_COUNT(props), props);
@@ -101,7 +101,7 @@ static void test_db(mem_api* mem, database_api* db)
     db->reallocate_buffer(mydb, obj2, "blob", sizeof(blob_t));
     db->set_buffer_data(mydb, obj2, "blob", 0, sizeof(blob_t), &my_blob);
 
-    db->set_float(mydb, obj, "x", 3.0);
+    db->set_float64(mydb, obj, "x", 3.0);
     for (uint32_t i = 0; i < 100; i++)
     {
         object_id_t id = db->add_object(mydb, typ);
@@ -111,7 +111,7 @@ static void test_db(mem_api* mem, database_api* db)
                   id.info.generation,
                   id.info.slot);
     }
-    log_debug("obj.x = %g", db->get_float(mydb, obj, "x"));
+    log_debug("obj.x = %g", db->get_float64(mydb, obj, "x"));
     db->get_buffer_data(mydb, obj, "blob", 0, sizeof(blob_t), &my_blob);
     log_debug("obj.blob = { .u = %d, .w = \"%s\", .x = %f }",
               my_blob.u,
@@ -442,15 +442,15 @@ int main(int argc, const char** argv)
     plugin_manager_init();
     mem_api* mem = load_plugin("memory", (version_t){1, 0, 0});
     ASSERT(mem);
-    database_api* db = load_plugin("database", (version_t){0, 0, 1});
+    log_init(&mem->vm);
+
+    database_api* db = load_plugin("database", (version_t){0, 0, 2});
     ASSERT(db);
     renderer_api* render_api = load_plugin("renderer", (version_t){0, 0, 1});
     ASSERT(render_api);
 
     oui_api* ui = load_plugin("ui", (version_t){0, 0, 1});
     ASSERT(ui);
-
-    log_init(&mem->vm);
 
     test_hash();
     test_db(mem, db);

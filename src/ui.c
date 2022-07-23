@@ -540,20 +540,20 @@ static uint32_t decode_utf8_code_point(uint8_t* bytes, uint32_t* result)
                         ASSERT(!bit3);
                         // 11110...
                         state = NEED_3_BYTES;
-                        *result = (byte & 0b111) << 18;
+                        *result = (byte & 0x7) << 18;
                     }
                     else
                     {
                         // 1110....
                         state = NEED_2_BYTES;
-                        *result = (byte & 0b1111) << 12;
+                        *result = (byte & 0xF) << 12;
                     }
                 }
                 else
                 {
                     // 110.....
                     state = NEED_1_BYTE;
-                    *result = (byte & 0b11111) << 6;
+                    *result = (byte & 0x1F) << 6;
                 }
             }
             else
@@ -565,16 +565,17 @@ static uint32_t decode_utf8_code_point(uint8_t* bytes, uint32_t* result)
             break;
         case NEED_3_BYTES:
             ASSERT(bit7 && !bit6);
-            *result |= (byte & 0b111111) << 12;
+            *result |= (byte & 0x3F) << 12;
             state = NEED_2_BYTES;
             break;
         case NEED_2_BYTES:
             ASSERT(bit7 && !bit6);
-            *result |= (byte & 0b111111) << 6;
+            *result |= (byte & 0x3F) << 6;
             state = NEED_1_BYTE;
+            break;
         case NEED_1_BYTE:
             ASSERT(bit7 && !bit6);
-            *result |= (byte & 0b111111) << 0;
+            *result |= (byte & 0x3F) << 0;
             state = DONE;
         case DONE:
             break;
@@ -605,7 +606,6 @@ static void text_box(const char* label, char* buffer, uint32_t size)
         }
 
         uint8_t* typed = ui.typed_utf8;
-        uint32_t i = 0;
         uint32_t code_point;
         uint32_t bytes;
 

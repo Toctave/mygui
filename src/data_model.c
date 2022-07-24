@@ -99,9 +99,9 @@ static uint32_t property_size(const property_definition_t* property)
     return 0;
 }
 
-static uint16_t add_object_type(database_o* db,
-                                uint32_t property_count,
-                                property_definition_t* properties)
+static object_type_t add_object_type(database_o* db,
+                                     uint32_t property_count,
+                                     property_definition_t* properties)
 {
     object_type_definition_t def;
     def.first_property = array_count(db->properties);
@@ -124,7 +124,7 @@ static uint16_t add_object_type(database_o* db,
 
     ASSERT(array_count(db->object_types) - 1 <= UINT16_MAX);
 
-    return array_count(db->object_types) - 1;
+    return (object_type_t){array_count(db->object_types) - 1};
 }
 
 static object_t* get_object(database_o* db, object_id_t id)
@@ -136,26 +136,26 @@ static object_t* get_object(database_o* db, object_id_t id)
 
     ASSERT(object->id.info.generation >= id.info.generation);
     if (object->id.info.generation > id.info.generation
-        || !object->id.info.type)
+        || !object->id.info.type.index)
     {
         return 0;
     }
 
-    ASSERT(id.info.type == object->id.info.type);
+    ASSERT(id.info.type.index == object->id.info.type.index);
     ASSERT(id.info.slot == object->id.info.slot);
 
     return object;
 }
 
 static const property_layout_t*
-get_property_by_name(database_o* db, uint32_t type_index, const char* prop_name)
+get_property_by_name(database_o* db, object_type_t type, const char* prop_name)
 {
-    ASSERT(type_index && type_index < array_count(db->object_types));
-    const object_type_definition_t* type = &db->object_types[type_index];
-    for (uint32_t i = 0; i < type->property_count; i++)
+    ASSERT(type.index && type.index < array_count(db->object_types));
+    const object_type_definition_t* type_def = &db->object_types[type.index];
+    for (uint32_t i = 0; i < type_def->property_count; i++)
     {
         const property_layout_t* prop =
-            &db->properties[type->first_property + i];
+            &db->properties[type_def->first_property + i];
 
         if (!strncmp(prop->def.name, prop_name, sizeof(prop->def.name)))
         {
@@ -169,7 +169,7 @@ get_property_by_name(database_o* db, uint32_t type_index, const char* prop_name)
 static void* get_property_ptr_full(database_o* db,
                                    object_id_t id,
                                    uint16_t property_type,
-                                   uint16_t object_type,
+                                   object_type_t object_type,
                                    const char* name)
 {
     const property_layout_t* prop =
@@ -177,7 +177,8 @@ static void* get_property_ptr_full(database_o* db,
 
     if (!prop //
         || prop->def.type != property_type
-        || (object_type && prop->def.object_type != object_type))
+        || (object_type.index
+            && prop->def.object_type.index != object_type.index))
     {
         return 0;
     }
@@ -198,7 +199,11 @@ static void* get_property_ptr(database_o* db,
                               uint32_t property_type,
                               const char* name)
 {
-    return get_property_ptr_full(db, id, property_type, 0, name);
+    return get_property_ptr_full(db,
+                                 id,
+                                 property_type,
+                                 (object_type_t){0},
+                                 name);
 }
 
 #define DO_DEFINE_GETTER_SETTER(upper, lower, type)                            \
@@ -343,7 +348,7 @@ static void destroy_object(database_o* db, object_id_t id)
         return;
     }
 
-    object_type_definition_t* type = &db->object_types[id.info.type];
+    object_type_definition_t* type = &db->object_types[id.info.type.index];
     for (uint32_t i = 0; i < type->property_count; i++)
     {
         property_layout_t* prop = &db->properties[type->first_property + i];
@@ -366,15 +371,15 @@ static void destroy_object(database_o* db, object_id_t id)
     mem_free(db->alloc, object->data, type->bytes);
 
     object->data = 0;
-    object->id.info.type = 0;
+    object->id.info.type = (object_type_t){0};
 
     db->objects[id.info.slot].next_free = db->objects[0].next_free;
     db->objects[0].next_free = id.info.slot;
 }
 
-static object_id_t create_object(database_o* db, uint16_t type_index)
+static object_id_t create_object(database_o* db, object_type_t type)
 {
-    if (type_index == 0 || type_index >= array_count(db->object_types))
+    if (type.index == 0 || type.index >= array_count(db->object_types))
     {
         return (object_id_t){0};
     }
@@ -387,17 +392,17 @@ static object_id_t create_object(database_o* db, uint16_t type_index)
     }
 
     object_t* object = &db->objects[slot_index].object;
-    object->id.info.type = type_index;
+    object->id.info.type = type;
     object->id.info.generation++;
     object->id.info.slot = slot_index;
 
-    object->data = mem_alloc(db->alloc, db->object_types[type_index].bytes);
-    memset(object->data, 0, db->object_types[type_index].bytes);
+    object->data = mem_alloc(db->alloc, db->object_types[type.index].bytes);
+    memset(object->data, 0, db->object_types[type.index].bytes);
 
-    object_type_definition_t* type = &db->object_types[type_index];
-    for (uint32_t i = 0; i < type->property_count; i++)
+    object_type_definition_t* type_def = &db->object_types[type.index];
+    for (uint32_t i = 0; i < type_def->property_count; i++)
     {
-        property_layout_t* prop = &db->properties[type->first_property + i];
+        property_layout_t* prop = &db->properties[type_def->first_property + i];
 
         if (prop->def.type == PTYPE_OBJECT)
         {

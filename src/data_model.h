@@ -33,11 +33,16 @@ typedef enum property_type_e
     PTYPE_REFERENCE,
 } property_type_e;
 
+typedef struct object_type_t
+{
+    uint16_t index;
+} object_type_t;
+
 typedef struct property_definition_t
 {
     char name[32];
     uint16_t type;
-    uint16_t object_type;
+    object_type_t object_type;
 } property_definition_t;
 
 typedef union object_id_t
@@ -51,7 +56,7 @@ typedef union object_id_t
         // TODO(octave) : investigate bit share of each field. Are 64K
         // generations enough ? Create a test case.
         uint32_t slot;
-        uint16_t type;
+        object_type_t type;
         uint16_t generation;
     } info;
 } object_id_t;
@@ -69,10 +74,10 @@ typedef struct database_api
     database_o* (*create)(mem_allocator_i* alloc);
     void (*destroy)(database_o* db);
 
-    uint16_t (*add_object_type)(database_o* db,
-                                uint32_t property_count,
-                                property_definition_t* properties);
-    object_id_t (*create_object)(database_o* db, uint16_t type_index);
+    object_type_t (*add_object_type)(database_o* db,
+                                     uint32_t property_count,
+                                     property_definition_t* properties);
+    object_id_t (*create_object)(database_o* db, object_type_t type);
     void (*destroy_object)(database_o* db, object_id_t id);
 
     FOR_ALL_BASE_PROPERTY_TYPES(DO_DECLARE_GETTER_SETTER)

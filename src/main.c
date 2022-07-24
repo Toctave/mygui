@@ -79,16 +79,17 @@ static void test_db(database_api* db)
         {.name = "y", .type = PTYPE_FLOAT64},
         {.name = "blob", .type = PTYPE_BLOB},
     };
-    uint16_t typ = db->add_object_type(mydb, STATIC_ARRAY_COUNT(props), props);
+    object_type_t typ =
+        db->add_object_type(mydb, STATIC_ARRAY_COUNT(props), props);
 
     property_definition_t nprops[] = {
         {.name = "subobject", .type = PTYPE_OBJECT, .object_type = typ},
         {.name = "reference", .type = PTYPE_REFERENCE, .object_type = typ},
     };
-    uint16_t ntyp =
+    object_type_t ntyp =
         db->add_object_type(mydb, STATIC_ARRAY_COUNT(nprops), nprops);
 
-    log_debug("typ = %u", typ);
+    log_debug("typ = %u", typ.index);
 
     object_id_t nobj = db->create_object(mydb, ntyp);
     object_id_t obj = db->create_object(mydb, typ);
@@ -107,7 +108,7 @@ static void test_db(database_api* db)
         object_id_t id = db->create_object(mydb, typ);
 
         log_debug("ID : %u %u %u",
-                  id.info.type,
+                  id.info.type.index,
                   id.info.generation,
                   id.info.slot);
     }

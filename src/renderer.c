@@ -64,9 +64,7 @@ typedef struct renderer_o
     uint32_t quad_count;
 } renderer_o;
 
-void* read_alloc_file(mem_api* mem,
-                      mem_stack_allocator_o* alloc,
-                      const char* path)
+void* read_alloc_file(mem_api* mem, mem_stack_o* alloc, const char* path)
 {
     platform_file_o* f = platform_open_file(path);
     if (!f)
@@ -89,9 +87,7 @@ void* read_alloc_file(mem_api* mem,
     return buf;
 }
 
-char* read_alloc_text_file(mem_api* mem,
-                           mem_stack_allocator_o* alloc,
-                           const char* path)
+char* read_alloc_text_file(mem_api* mem, mem_stack_o* alloc, const char* path)
 {
     platform_file_o* f = platform_open_file(path);
     if (!f)
@@ -313,13 +309,17 @@ static const char* get_next_line(const char* current)
 }
 
 static bool load_bdf(mem_api* mem,
-                     mem_stack_allocator_o* tmp,
-                     mem_stack_allocator_o* permanent,
+                     mem_stack_o* tmp,
+                     mem_stack_o* permanent,
                      font_t* font,
                      const char* bdf_path)
 {
     ASSERT(!font->glyphs);
     const char* bdf = read_alloc_text_file(mem, tmp, bdf_path);
+    if (!bdf)
+    {
+        return false;
+    }
     const char* line = bdf;
 
     bool in_properties = false;
@@ -586,7 +586,7 @@ static void texture_set_data(texture_t* texture, uint8_t* data)
 }
 
 static void texture_create_from_font(mem_api* mem,
-                                     mem_stack_allocator_o* tmp,
+                                     mem_stack_o* tmp,
                                      texture_t* texture,
                                      const font_t* font)
 {
@@ -638,7 +638,7 @@ static void texture_create_from_font(mem_api* mem,
 }
 
 static GLuint compile_shader_stage(mem_api* mem,
-                                   mem_stack_allocator_o* tmp,
+                                   mem_stack_o* tmp,
                                    const char* path,
                                    shader_stage_e stage_type)
 {
@@ -701,7 +701,7 @@ static GLuint compile_shader_stage(mem_api* mem,
 }
 
 static GLuint compile_shader(mem_api* mem,
-                             mem_stack_allocator_o* tmp,
+                             mem_stack_o* tmp,
                              const char* vertex_path,
                              const char* fragment_path)
 {
@@ -750,9 +750,9 @@ static GLuint compile_shader(mem_api* mem,
     return program;
 }
 
-static void renderer_init(mem_api* mem,
-                          mem_stack_allocator_o* permanent,
-                          mem_stack_allocator_o* tmp,
+static bool renderer_init(mem_api* mem,
+                          mem_stack_o* permanent,
+                          mem_stack_o* tmp,
                           renderer_o* renderer)
 {
     glEnable(GL_BLEND);
@@ -805,11 +805,16 @@ static void renderer_init(mem_api* mem,
     renderer->index_data = mem->stack_push(permanent, Gibi(1));
 
     // Font texture
-    load_bdf(mem, tmp, tmp, &renderer->font, "assets/haxor11.bdf");
+    if (!load_bdf(mem, tmp, tmp, &renderer->font, "assets/haxor11.bdf"))
+    {
+        return false;
+    }
     texture_create_from_font(mem,
                              tmp,
                              &renderer->font_texture,
                              &renderer->font);
+
+    return true;
 }
 
 static void draw_quad_ex(renderer_o* renderer,
@@ -1032,16 +1037,21 @@ static uint32_t get_font_height(renderer_i* renderer)
     return renderer->impl->font.bbox.extent[1];
 }
 
-static renderer_i* create(mem_api* mem,
-                          mem_stack_allocator_o* permanent,
-                          mem_stack_allocator_o* tmp)
+static renderer_i*
+create(mem_api* mem, mem_stack_o* permanent, mem_stack_o* tmp)
 {
+    uint64_t cursor = mem->stack_get_cursor(permanent);
+
     renderer_i* result = mem->stack_push(permanent, sizeof(renderer_i));
     *result = (renderer_i){0};
     result->impl = mem->stack_push(permanent, sizeof(renderer_o));
     *result->impl = (renderer_o){0};
 
-    renderer_init(mem, permanent, tmp, result->impl);
+    if (!renderer_init(mem, permanent, tmp, result->impl))
+    {
+        mem->stack_revert(permanent, cursor);
+        return 0;
+    }
 
     result->draw_quad = draw_quad;
     result->draw_text = draw_text;

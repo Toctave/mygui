@@ -9,7 +9,7 @@
 
 #define MAX_ALIGNMENT 8
 
-static void* std_realloc(struct mem_allocator_impl* impl,
+static void* std_realloc(void* impl,
                          void* ptr,
                          uint64_t old_size,
                          uint64_t new_size,
@@ -23,7 +23,7 @@ static void* std_realloc(struct mem_allocator_impl* impl,
     return realloc(ptr, new_size);
 }
 
-static void* vm_realloc(struct mem_allocator_impl* impl,
+static void* vm_realloc(void* impl,
                         void* ptr,
                         uint64_t old_size,
                         uint64_t new_size,
@@ -51,7 +51,7 @@ static void* vm_realloc(struct mem_allocator_impl* impl,
     return new_ptr;
 }
 
-struct mem_stack_allocator_o
+struct mem_stack_o
 {
     void* base;
     uint64_t size;
@@ -78,37 +78,33 @@ static void* shift_align_up(void* ptr, uint64_t bytes, uint64_t alignment)
     return align_up(shift_up(ptr, bytes), alignment);
 }
 
-static mem_stack_allocator_o* stack_create(void* buffer, uint64_t size)
+static mem_stack_o* stack_create(void* buffer, uint64_t size)
 {
-    mem_stack_allocator_o* stack = buffer;
+    mem_stack_o* stack = buffer;
 
-    stack->base =
-        shift_align_up(buffer, sizeof(mem_stack_allocator_o), MAX_ALIGNMENT);
+    stack->base = shift_align_up(buffer, sizeof(mem_stack_o), MAX_ALIGNMENT);
     stack->size = (uint8_t*)buffer + size - (uint8_t*)stack->base;
     stack->used = 0;
 
     return stack;
 }
 
-static void stack_destroy(mem_stack_allocator_o* stack)
+static void stack_destroy(mem_stack_o* stack)
 {
     stack->base = 0;
     stack->size = 0;
     stack->used = 0;
 }
 
-static uint64_t stack_get_cursor(mem_stack_allocator_o* alloc)
-{
-    return alloc->used;
-}
+static uint64_t stack_get_cursor(mem_stack_o* alloc) { return alloc->used; }
 
-static void stack_revert(mem_stack_allocator_o* alloc, uint64_t cursor)
+static void stack_revert(mem_stack_o* alloc, uint64_t cursor)
 {
     ASSERT(cursor <= alloc->used);
     alloc->used = cursor;
 }
 
-static void* stack_push(mem_stack_allocator_o* alloc, uint64_t size)
+static void* stack_push(mem_stack_o* alloc, uint64_t size)
 {
     ASSERT(alloc->used + size < alloc->size);
     void* result = (uint8_t*)alloc->base + alloc->used;

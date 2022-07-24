@@ -4,7 +4,7 @@
 #include <stdarg.h>
 
 typedef struct mem_api mem_api;
-typedef struct mem_stack_allocator_o mem_stack_allocator_o;
+typedef struct mem_stack_o mem_stack_o;
 
 #define Kibi(v) (1024ull * (v))
 #define Mebi(v) (1024ull * Kibi(v))
@@ -20,11 +20,8 @@ typedef struct mem_stack_allocator_o mem_stack_allocator_o;
 
 #define offsetof(type, member) ((uint8_t*)(&((type*)0)->member) - (uint8_t*)0)
 
-char* vtprintf(mem_api* mem,
-               mem_stack_allocator_o* stack,
-               const char* fmt,
-               va_list args);
-char* tprintf(mem_api* mem, mem_stack_allocator_o* stack, const char* fmt, ...);
+char* vtprintf(mem_api* mem, mem_stack_o* stack, const char* fmt, va_list args);
+char* tprintf(mem_api* mem, mem_stack_o* stack, const char* fmt, ...);
 
 static inline void set_bit(uint8_t* bytes, uint32_t index)
 {

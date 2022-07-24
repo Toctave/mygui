@@ -2,12 +2,12 @@
 
 #include "base_types.h"
 
-typedef struct mem_stack_allocator_o mem_stack_allocator_o;
+typedef struct mem_stack_o mem_stack_o;
 
 typedef struct mem_allocator_i
 {
-    struct mem_allocator_impl* impl;
-    void* (*realloc)(struct mem_allocator_impl* impl,
+    void* impl;
+    void* (*realloc)(void* impl,
                      void* ptr,
                      uint64_t old_size,
                      uint64_t new_size,
@@ -20,11 +20,11 @@ typedef struct mem_api
     mem_allocator_i std; // C standard lib allocator
     mem_allocator_i vm;  // Virtual Memory allocator
 
-    mem_stack_allocator_o* (*stack_create)(void* buffer, uint64_t size);
-    void (*stack_destroy)(mem_stack_allocator_o* stack);
-    uint64_t (*stack_get_cursor)(mem_stack_allocator_o* stack);
-    void (*stack_revert)(mem_stack_allocator_o* stack, uint64_t cursor);
-    void* (*stack_push)(mem_stack_allocator_o* alloc, uint64_t size);
+    mem_stack_o* (*stack_create)(void* buffer, uint64_t size);
+    void (*stack_destroy)(mem_stack_o* stack);
+    uint64_t (*stack_get_cursor)(mem_stack_o* stack);
+    void (*stack_revert)(mem_stack_o* stack, uint64_t cursor);
+    void* (*stack_push)(mem_stack_o* alloc, uint64_t size);
 } mem_api;
 
 #define mem_alloc(a, size)                                                     \

@@ -460,14 +460,19 @@ int main(int argc, const char** argv)
     test_eval_graph(mem);
 
     void* tmp_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
-    mem_stack_allocator_o* tmp_alloc =
-        mem->stack_create(tmp_stack_buf, Gibi(1024));
+    mem_stack_o* tmp_alloc = mem->stack_create(tmp_stack_buf, Gibi(1024));
 
     void* permanent_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
-    mem_stack_allocator_o* permanent_alloc =
+    mem_stack_o* permanent_alloc =
         mem->stack_create(permanent_stack_buf, Gibi(1024));
 
     renderer = render_api->create(mem, permanent_alloc, tmp_alloc);
+    if (!renderer)
+    {
+        log_error("Could not create renderer, exiting.");
+        log_flush();
+        return 1;
+    }
 
     platform_input_info_t input = {0};
 

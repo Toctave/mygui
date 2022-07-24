@@ -3,10 +3,7 @@
 #include "memory.h"
 #include <stdio.h>
 
-char* vtprintf(mem_api* mem,
-               mem_stack_allocator_o* stack,
-               const char* fmt,
-               va_list args)
+char* vtprintf(mem_api* mem, mem_stack_o* stack, const char* fmt, va_list args)
 {
     va_list args_copy;
     va_copy(args_copy, args);
@@ -20,7 +17,7 @@ char* vtprintf(mem_api* mem,
     return result;
 }
 
-char* tprintf(mem_api* mem, mem_stack_allocator_o* stack, const char* fmt, ...)
+char* tprintf(mem_api* mem, mem_stack_o* stack, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);

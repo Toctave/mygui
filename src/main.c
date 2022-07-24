@@ -260,8 +260,8 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
 
             if (is_connected_input)
             {
-                // if already connected, draw connection, and use the
-                // connected plug as source when dragging
+                // if already connected, use the connected plug as
+                // source when dragging
                 src_plug = (plug_info_t){node->plugs[plug].connected_node,
                                          node->plugs[plug].connected_plug};
                 get_plug_pos(ui,
@@ -270,13 +270,6 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                              src_plug.plug,
                              &src_plug_x,
                              &src_plug_y);
-
-                ui->draw_line(src_plug_x,
-                              src_plug_y,
-                              plug_x,
-                              plug_y,
-                              4,
-                              *ui->get_color(UI_COLOR_MAIN));
             }
 
             if (ui->drag_and_drop_source(&src_plug, sizeof(src_plug)))
@@ -300,7 +293,21 @@ static void graph_ui(oui_api* ui, node_graph_t* graph)
                                   src_plug.plug,
                                   node_index,
                                   plug);
+                    is_connected_input = is_input(graph, node_index, plug)
+                                         && node->plugs[plug].connected_node;
+                    log_debug("connected. Is connected input : %d",
+                              is_connected_input);
                 }
+            }
+
+            if (is_connected_input)
+            {
+                ui->draw_line(src_plug_x,
+                              src_plug_y,
+                              plug_x,
+                              plug_y,
+                              4,
+                              *ui->get_color(UI_COLOR_MAIN));
             }
 
             ui->draw_quad(sq, *ui->get_color(UI_COLOR_BACKGROUND));

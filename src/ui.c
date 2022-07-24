@@ -267,9 +267,10 @@ static bool drag_and_drop_source(const void* payload, uint32_t size)
     }
 }
 
-static bool get_drag_and_drop_paylaod(void* payload, uint32_t size)
+static bool get_drag_and_drop_payload(void* payload, uint32_t size)
 {
-    if (ui.drag_state == DRAG_DROP_DRAGGING)
+    if (ui.drag_state == DRAG_DROP_DRAGGING
+        || ui.drag_state == DRAG_DROP_DROPPED)
     {
         memcpy(payload, ui.drag_payload, size);
         return true;
@@ -748,7 +749,7 @@ static void load(void* api)
     ui_api->get_color = get_color;
     ui_api->get_cursor_x = get_cursor_x;
     ui_api->get_cursor_y = get_cursor_y;
-    ui_api->get_drag_and_drop_payload = get_drag_and_drop_paylaod;
+    ui_api->get_drag_and_drop_payload = get_drag_and_drop_payload;
     ui_api->set_cursor = set_cursor;
     ui_api->hover_rect = hover_rect;
     ui_api->hold_rect = hold_rect;

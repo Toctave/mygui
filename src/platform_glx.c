@@ -241,7 +241,7 @@ bool platform_init(const char* argv0,
             GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
             GLX_BUFFER_SIZE,   32,
             GLX_DOUBLEBUFFER,  true,
-            GLX_SAMPLES,       4,
+            GLX_SAMPLES,       8,
             None,
         };
         // clang-format on

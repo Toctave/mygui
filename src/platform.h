@@ -7,6 +7,8 @@
 
 extern char EXECUTABLE_PATH[1024];
 
+typedef struct mem_allocator_i mem_allocator_i;
+
 enum
 {
     MOUSE_BUTTON_LEFT = 1 << 0,
@@ -60,6 +62,7 @@ uint64_t platform_read_file(platform_file_o* file, void* buffer, uint64_t size);
 
 uint64_t platform_get_nanoseconds();
 
+char* platform_get_relative_path(mem_allocator_i* alloc, const char* name);
 void platform_get_shared_library_path(char* path,
                                       uint32_t size,
                                       const char* name);

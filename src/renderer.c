@@ -1,8 +1,10 @@
 #include "renderer.h"
 
 #include "assert.h"
+#include "logging.h"
 #include "memory.h"
 #include "opengl_functions.h"
+#include "platform.h"
 #include "plugin_sdk.h"
 #include "util.h"
 
@@ -64,21 +66,22 @@ typedef struct renderer_o
     uint32_t quad_count;
 } renderer_o;
 
-void* read_alloc_file(mem_api* mem, mem_stack_o* alloc, const char* path)
+static void* read_alloc_file(mem_stack_o* alloc, const char* path)
 {
-    platform_file_o* f = platform_open_file(path);
+    platform_file_o* f =
+        platform_open_file(platform_get_relative_path(mem_scratch_alloc, path));
     if (!f)
     {
         return 0;
     }
     uint64_t size = platform_get_file_size(f);
 
-    uint64_t prev = mem->stack_get_cursor(alloc);
-    void* buf = mem->stack_push(alloc, size);
+    uint64_t prev = mem_stack_get_cursor(alloc);
+    void* buf = mem_stack_push(alloc, size);
 
     if (platform_read_file(f, buf, size) != size)
     {
-        mem->stack_revert(alloc, prev);
+        mem_stack_revert(alloc, prev);
         buf = 0;
     }
 
@@ -87,21 +90,21 @@ void* read_alloc_file(mem_api* mem, mem_stack_o* alloc, const char* path)
     return buf;
 }
 
-char* read_alloc_text_file(mem_api* mem, mem_stack_o* alloc, const char* path)
+static char* read_alloc_text_file(mem_allocator_i* alloc, const char* path)
 {
-    platform_file_o* f = platform_open_file(path);
+    platform_file_o* f =
+        platform_open_file(platform_get_relative_path(mem_scratch_alloc, path));
     if (!f)
     {
         return 0;
     }
     uint64_t size = platform_get_file_size(f);
 
-    uint64_t prev = mem->stack_get_cursor(alloc);
-    char* buf = mem->stack_push(alloc, size + 1);
+    char* buf = mem_alloc(alloc, size + 1);
 
     if (platform_read_file(f, buf, size) != size)
     {
-        mem->stack_revert(alloc, prev);
+        mem_free(alloc, buf, size + 1);
         buf = 0;
     }
     else
@@ -308,14 +311,10 @@ static const char* get_next_line(const char* current)
     return current;
 }
 
-static bool load_bdf(mem_api* mem,
-                     mem_stack_o* tmp,
-                     mem_stack_o* permanent,
-                     font_t* font,
-                     const char* bdf_path)
+static bool load_bdf(mem_allocator_i* alloc, font_t* font, const char* bdf_path)
 {
     ASSERT(!font->glyphs);
-    const char* bdf = read_alloc_text_file(mem, tmp, bdf_path);
+    const char* bdf = read_alloc_text_file(mem_scratch_alloc, bdf_path);
     if (!bdf)
     {
         return false;
@@ -433,14 +432,12 @@ static bool load_bdf(mem_api* mem,
             {
                 font->glyph_count = character_count;
                 font->glyphs =
-                    mem->stack_push(permanent,
-                                    sizeof(font_glyph_t) * font->glyph_count);
+                    mem_alloc(alloc, sizeof(font_glyph_t) * font->glyph_count);
 
                 font->stride = (font->bbox.extent[0] + 7) / 8;
                 glyph_bitmap_size = font->stride * font->bbox.extent[1];
                 font->bitmap =
-                    mem->stack_push(permanent,
-                                    font->glyph_count * glyph_bitmap_size);
+                    mem_alloc(alloc, font->glyph_count * glyph_bitmap_size);
                 current_glyph = font->glyphs;
                 current_glyph_bitmap = font->bitmap;
             }
@@ -585,10 +582,7 @@ static void texture_set_data(texture_t* texture, uint8_t* data)
                     data);
 }
 
-static void texture_create_from_font(mem_api* mem,
-                                     mem_stack_o* tmp,
-                                     texture_t* texture,
-                                     const font_t* font)
+static void texture_create_from_font(texture_t* texture, const font_t* font)
 {
     texture_create(
         texture,
@@ -596,7 +590,8 @@ static void texture_create_from_font(mem_api* mem,
         1 + font->bbox.extent[1] * font->glyph_count); // keep one line of white
 
     uint32_t texture_stride = 4 * texture->width;
-    uint8_t* pixels = mem->stack_push(tmp, texture_stride * texture->height);
+    uint8_t* pixels =
+        mem_alloc(mem_scratch_alloc, texture_stride * texture->height);
 
     // Fill white line
     for (uint32_t x = 0; x < 4 * texture->width; x++)
@@ -637,10 +632,7 @@ static void texture_create_from_font(mem_api* mem,
     texture_set_data(texture, pixels);
 }
 
-static GLuint compile_shader_stage(mem_api* mem,
-                                   mem_stack_o* tmp,
-                                   const char* path,
-                                   shader_stage_e stage_type)
+static GLuint compile_shader_stage(const char* path, shader_stage_e stage_type)
 {
     GLenum gl_stage_type = 0;
     switch (stage_type)
@@ -656,8 +648,7 @@ static GLuint compile_shader_stage(mem_api* mem,
     }
     GLuint stage = glCreateShader(gl_stage_type);
 
-    const char* abs_path = tprintf(mem, tmp, "%s/%s", EXECUTABLE_PATH, path);
-    const char* source = read_alloc_text_file(mem, tmp, abs_path);
+    const char* source = read_alloc_text_file(mem_scratch_alloc, path);
     ASSERT(source);
 
     const char* sources[] = {source};
@@ -673,7 +664,7 @@ static GLuint compile_shader_stage(mem_api* mem,
         GLsizei info_log_length;
         glGetShaderiv(stage, GL_INFO_LOG_LENGTH, &info_log_length);
 
-        char* info_log = mem->stack_push(tmp, info_log_length);
+        char* info_log = mem_alloc(mem_scratch_alloc, info_log_length);
         glGetShaderInfoLog(stage, info_log_length, 0, info_log);
 
         log_error("Shader compilation error :\n");
@@ -700,20 +691,15 @@ static GLuint compile_shader_stage(mem_api* mem,
     return stage;
 }
 
-static GLuint compile_shader(mem_api* mem,
-                             mem_stack_o* tmp,
-                             const char* vertex_path,
-                             const char* fragment_path)
+static GLuint compile_shader(const char* vertex_path, const char* fragment_path)
 {
-    GLuint vs =
-        compile_shader_stage(mem, tmp, vertex_path, SHADER_STAGE_VERTEX);
+    GLuint vs = compile_shader_stage(vertex_path, SHADER_STAGE_VERTEX);
     if (!vs)
     {
         return 0;
     }
 
-    GLuint fs =
-        compile_shader_stage(mem, tmp, fragment_path, SHADER_STAGE_FRAGMENT);
+    GLuint fs = compile_shader_stage(fragment_path, SHADER_STAGE_FRAGMENT);
     if (!fs)
     {
         glDeleteShader(vs);
@@ -735,7 +721,7 @@ static GLuint compile_shader(mem_api* mem,
         GLsizei info_log_length;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_log_length);
 
-        char* info_log = mem->stack_push(tmp, info_log_length);
+        char* info_log = mem_alloc(mem_scratch_alloc, info_log_length);
         glGetProgramInfoLog(program, info_log_length, 0, info_log);
 
         log_error("Shader linking error :\n%s", info_log);
@@ -750,10 +736,7 @@ static GLuint compile_shader(mem_api* mem,
     return program;
 }
 
-static bool renderer_init(mem_api* mem,
-                          mem_stack_o* permanent,
-                          mem_stack_o* tmp,
-                          renderer_o* renderer)
+static bool renderer_init(mem_allocator_i* alloc, renderer_o* renderer)
 {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -762,8 +745,7 @@ static bool renderer_init(mem_api* mem,
     glGenBuffers(1, &renderer->ebo);
     glGenVertexArrays(1, &renderer->vao);
 
-    renderer->shader =
-        compile_shader(mem, tmp, "shaders/shader.vs", "shaders/shader.fs");
+    renderer->shader = compile_shader("shaders/shader.vs", "shaders/shader.fs");
 
     glBindVertexArray(renderer->vao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->ebo);
@@ -801,18 +783,15 @@ static bool renderer_init(mem_api* mem,
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    renderer->vertex_data = mem->stack_push(permanent, Gibi(1));
-    renderer->index_data = mem->stack_push(permanent, Gibi(1));
+    renderer->vertex_data = mem_alloc(alloc, Gibi(1));
+    renderer->index_data = mem_alloc(alloc, Gibi(1));
 
     // Font texture
-    if (!load_bdf(mem, tmp, tmp, &renderer->font, "assets/haxor11.bdf"))
+    if (!load_bdf(mem_scratch_alloc, &renderer->font, "assets/haxor11.bdf"))
     {
         return false;
     }
-    texture_create_from_font(mem,
-                             tmp,
-                             &renderer->font_texture,
-                             &renderer->font);
+    texture_create_from_font(&renderer->font_texture, &renderer->font);
 
     return true;
 }
@@ -1037,19 +1016,17 @@ static uint32_t get_font_height(renderer_i* renderer)
     return renderer->impl->font.bbox.extent[1];
 }
 
-static renderer_i*
-create(mem_api* mem, mem_stack_o* permanent, mem_stack_o* tmp)
+static renderer_i* create(mem_allocator_i* alloc)
 {
-    uint64_t cursor = mem->stack_get_cursor(permanent);
-
-    renderer_i* result = mem->stack_push(permanent, sizeof(renderer_i));
+    renderer_i* result = mem_alloc(alloc, sizeof(renderer_i));
     *result = (renderer_i){0};
-    result->impl = mem->stack_push(permanent, sizeof(renderer_o));
+    result->impl = mem_alloc(alloc, sizeof(renderer_o));
     *result->impl = (renderer_o){0};
 
-    if (!renderer_init(mem, permanent, tmp, result->impl))
+    if (!renderer_init(alloc, result->impl))
     {
-        mem->stack_revert(permanent, cursor);
+        mem_free(alloc, result->impl, sizeof(renderer_o));
+        mem_free(alloc, result, sizeof(renderer_i));
         return 0;
     }
 

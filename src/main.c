@@ -69,9 +69,9 @@ typedef struct blob_t
     float x;
 } blob_t;
 
-static void test_db(mem_api* mem, database_api* db)
+static void test_db(database_api* db)
 {
-    database_o* mydb = db->create(&mem->vm);
+    database_o* mydb = db->create(mem_vm_alloc);
 
     property_definition_t props[] = {
         {.name = "active", .type = PTYPE_BOOL},
@@ -126,10 +126,10 @@ void add_integer(const node_plug_value_t* inputs, node_plug_value_t* outputs)
     outputs[0].integer = inputs[0].integer + inputs[1].integer;
 }
 
-static void test_eval_graph(mem_api* mem)
+static void test_eval_graph()
 {
     node_graph_t graph;
-    node_graph_init(&mem->std, &graph);
+    node_graph_init(mem_std_alloc, &graph);
 
     node_type_definition_t node_add = {
         .name = "add",
@@ -141,10 +141,10 @@ static void test_eval_graph(mem_api* mem)
         .evaluate = add_integer,
     };
 
-    uint32_t add_type = add_node_type(&mem->std, &graph, node_add);
+    uint32_t add_type = add_node_type(mem_std_alloc, &graph, node_add);
 
-    uint32_t f = add_node(&mem->std, &graph, add_type);
-    uint32_t g = add_node(&mem->std, &graph, add_type);
+    uint32_t f = add_node(mem_std_alloc, &graph, add_type);
+    uint32_t g = add_node(mem_std_alloc, &graph, add_type);
 
     connect_nodes(&graph, f, 2, g, 0);
 
@@ -156,7 +156,7 @@ static void test_eval_graph(mem_api* mem)
     *y = 25;
     *z = 4;
 
-    build_schedule(&mem->std, &graph);
+    build_schedule(mem_std_alloc, &graph);
     evaluate_schedule(&graph);
 
     log_debug("result = %ld", get_plug_value(&graph, g, 2)->integer);
@@ -442,10 +442,10 @@ int main(int argc, const char** argv)
         return 1;
     }
 
+    mem_init();
+
     plugin_manager_init();
-    mem_api* mem = load_plugin("memory", (version_t){1, 0, 0});
-    ASSERT(mem);
-    log_init(&mem->vm);
+    log_init(mem_vm_alloc);
 
     database_api* db = load_plugin("database", (version_t){0, 0, 2});
     ASSERT(db);
@@ -456,17 +456,10 @@ int main(int argc, const char** argv)
     ASSERT(ui);
 
     test_hash();
-    test_db(mem, db);
-    test_eval_graph(mem);
+    test_db(db);
+    test_eval_graph();
 
-    void* tmp_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
-    mem_stack_o* tmp_alloc = mem->stack_create(tmp_stack_buf, Gibi(1024));
-
-    void* permanent_stack_buf = mem_alloc(&mem->vm, Gibi(1024));
-    mem_stack_o* permanent_alloc =
-        mem->stack_create(permanent_stack_buf, Gibi(1024));
-
-    renderer = render_api->create(mem, permanent_alloc, tmp_alloc);
+    renderer = render_api->create(mem_vm_alloc);
     if (!renderer)
     {
         log_error("Could not create renderer, exiting.");
@@ -476,12 +469,12 @@ int main(int argc, const char** argv)
 
     platform_input_info_t input = {0};
 
-    ui->init(&mem->std, renderer);
+    ui->init(mem_std_alloc, renderer);
 
     node_graph_t graph;
-    node_graph_init(&mem->std, &graph);
+    node_graph_init(mem_std_alloc, &graph);
 
-    add_node_type(&mem->std,
+    add_node_type(mem_std_alloc,
                   &graph,
                   (node_type_definition_t){
                       .name = "add integers",
@@ -494,7 +487,7 @@ int main(int argc, const char** argv)
                       .evaluate = add_integer,
                   });
 
-    add_node_type(&mem->std,
+    add_node_type(mem_std_alloc,
                   &graph,
                   (node_type_definition_t){
                       .name = "get time",
@@ -505,7 +498,7 @@ int main(int argc, const char** argv)
                       .evaluate = node_get_time,
                   });
 
-    add_node_type(&mem->std,
+    add_node_type(mem_std_alloc,
                   &graph,
                   (node_type_definition_t){
                       .name = "sin",
@@ -516,7 +509,7 @@ int main(int argc, const char** argv)
                       .evaluate = node_sin,
                   });
 
-    add_node_type(&mem->std,
+    add_node_type(mem_std_alloc,
                   &graph,
                   (node_type_definition_t){
                       .name = "multiply",
@@ -531,7 +524,7 @@ int main(int argc, const char** argv)
                       .evaluate = node_multiply,
                   });
 
-    add_node_type(&mem->std,
+    add_node_type(mem_std_alloc,
                   &graph,
                   (node_type_definition_t){
                       .name = "add",
@@ -546,7 +539,7 @@ int main(int argc, const char** argv)
                       .evaluate = node_add,
                   });
 
-    add_node_type(&mem->std,
+    add_node_type(mem_std_alloc,
                   &graph,
                   (node_type_definition_t){
                       .name = "draw rectangle",
@@ -583,7 +576,7 @@ int main(int argc, const char** argv)
         {
         }
 
-        mem->stack_revert(tmp_alloc, 0);
+        mem_free(mem_scratch_alloc, 0, 0); // reset scratch allocator
 
         platform_handle_input_events(&input);
 
@@ -609,7 +602,7 @@ int main(int argc, const char** argv)
 
         if (array_count(graph.nodes) > 1)
         {
-            build_schedule(&mem->std, &graph);
+            build_schedule(mem_std_alloc, &graph);
             evaluate_schedule(&graph);
         }
 
@@ -617,13 +610,12 @@ int main(int argc, const char** argv)
              type_index < array_count(graph.node_types);
              type_index++)
         {
-            char* label = tprintf(mem,
-                                  tmp_alloc,
+            char* label = tprintf(mem_scratch_alloc,
                                   "%s",
                                   graph.node_types[type_index].name);
             if (ui->button(label))
             {
-                uint32_t idx = add_node(&mem->std, &graph, type_index);
+                uint32_t idx = add_node(mem_std_alloc, &graph, type_index);
                 graph.nodes[idx].box = (quad_i32_t){{300, 10}, {200, 200}};
             }
         }
@@ -640,6 +632,8 @@ int main(int argc, const char** argv)
     }
 
     log_terminate();
+
+    mem_terminate();
 
     return 0;
 }

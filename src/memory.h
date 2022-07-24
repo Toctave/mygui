@@ -15,17 +15,19 @@ typedef struct mem_allocator_i
                      uint32_t line_number);
 } mem_allocator_i;
 
-typedef struct mem_api
-{
-    mem_allocator_i std; // C standard lib allocator
-    mem_allocator_i vm;  // Virtual Memory allocator
+extern mem_allocator_i* mem_std_alloc;  // C standard lib allocator
+extern mem_allocator_i* mem_vm_alloc;   // Virtual Memory allocator
+extern mem_allocator_i*
+    mem_scratch_alloc; /* // temporary stack, uses VM memory, cleared regularly */
 
-    mem_stack_o* (*stack_create)(void* buffer, uint64_t size);
-    void (*stack_destroy)(mem_stack_o* stack);
-    uint64_t (*stack_get_cursor)(mem_stack_o* stack);
-    void (*stack_revert)(mem_stack_o* stack, uint64_t cursor);
-    void* (*stack_push)(mem_stack_o* alloc, uint64_t size);
-} mem_api;
+void mem_init();
+void mem_terminate();
+
+mem_stack_o* mem_stack_create(void* buffer, uint64_t size);
+void mem_stack_destroy(mem_stack_o* stack);
+uint64_t mem_stack_get_cursor(mem_stack_o* stack);
+void mem_stack_revert(mem_stack_o* stack, uint64_t cursor);
+void* mem_stack_push(mem_stack_o* alloc, uint64_t size);
 
 #define mem_alloc(a, size)                                                     \
     ((a)->realloc((a)->impl, 0, 0, size, __FILE__, __LINE__))

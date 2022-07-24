@@ -3,26 +3,26 @@
 #include "memory.h"
 #include <stdio.h>
 
-char* vtprintf(mem_api* mem, mem_stack_o* stack, const char* fmt, va_list args)
+char* vtprintf(mem_allocator_i* alloc, const char* fmt, va_list args)
 {
     va_list args_copy;
     va_copy(args_copy, args);
 
     int needed = vsnprintf(0, 0, fmt, args) + 1;
 
-    char* result = mem->stack_push(stack, needed);
+    char* result = mem_alloc(alloc, needed);
 
     vsnprintf(result, needed, fmt, args_copy);
 
     return result;
 }
 
-char* tprintf(mem_api* mem, mem_stack_o* stack, const char* fmt, ...)
+char* tprintf(mem_allocator_i* alloc, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
 
-    char* result = vtprintf(mem, stack, fmt, args);
+    char* result = vtprintf(alloc, fmt, args);
 
     va_end(args);
 

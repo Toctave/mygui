@@ -5,8 +5,7 @@
 typedef struct renderer_o renderer_o;
 typedef struct renderer_i renderer_i;
 
-typedef struct mem_stack_o mem_stack_o;
-typedef struct mem_api mem_api;
+typedef struct mem_allocator_i mem_allocator_i;
 
 struct renderer_i
 {
@@ -43,8 +42,6 @@ struct renderer_i
 
 typedef struct renderer_api
 {
-    renderer_i* (*create)(mem_api* mem,
-                          mem_stack_o* permanent,
-                          mem_stack_o* tmp);
+    renderer_i* (*create)(mem_allocator_i* alloc);
     void (*destroy)(renderer_i* renderer);
 } renderer_api;

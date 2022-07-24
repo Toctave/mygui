@@ -5,7 +5,6 @@ rm -r build/*
 
 common_flags="-g -O0"
 
-memory_sources="src/memory.c"
 exe_sources="
 src/color.c
 src/evaluation_graph.c
@@ -14,7 +13,7 @@ src/logging.c
 src/main.c
 src/memory.c
 src/platform_glx.c
-src/platform_keyboard.c
+src/platform.c
 src/platform_linux.c
 src/plugin_manager.c
 src/stretchy_buffer.c
@@ -36,7 +35,6 @@ build_plugin () {
 
 $compiler $common_flags $exe_flags $warnings $exe_sources -o build/oui $libs
 
-build_plugin "memory" "src/memory.c"
 build_plugin "database" "src/data_model.c"
 build_plugin "renderer" "src/renderer.c"
 build_plugin "ui" "src/ui.c"

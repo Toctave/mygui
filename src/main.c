@@ -71,7 +71,7 @@ typedef struct blob_t
 
 static void test_db(database_api* db)
 {
-    database_o* mydb = db->create(mem_vm_alloc);
+    database_o* mydb = db->create(mem_std_alloc);
 
     property_definition_t props[] = {
         {.name = "active", .type = PTYPE_BOOL},

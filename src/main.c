@@ -119,6 +119,31 @@ static void test_db(database_api* db)
               my_blob.w,
               my_blob.x);
 
+    object_id_t id = db->create_object(mydb, typ);
+    db->set_float64(mydb, id, "x", 53.);
+    log_debug("slot = %u, gen = %u, x = %g",
+              id.info.slot,
+              id.info.generation,
+              db->get_float64(mydb, id, "x"));
+
+    db->destroy_object(mydb, id);
+
+    for (uint32_t i = 0; i < 66000; i++)
+    {
+        object_id_t new_object = db->create_object(mydb, ntyp);
+        ASSERT(new_object.info.type.index == ntyp.index);
+        double xval = db->get_float64_or(mydb, id, "x", -1.);
+        if (xval != -1.)
+        {
+            log_debug("i = %u, slot = %u, gen = %u, x = %g",
+                      i,
+                      new_object.info.slot,
+                      new_object.info.generation,
+                      xval);
+        }
+        db->destroy_object(mydb, new_object);
+    }
+
     db->destroy(mydb);
 }
 

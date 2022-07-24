@@ -62,9 +62,13 @@ typedef union object_id_t
 } object_id_t;
 
 #define DO_DECLARE_GETTER_SETTER(upper, lower, type)                           \
+    type (*get_##lower##_or)(database_o * db,                                  \
+                             object_id_t object,                               \
+                             const char* name,                                 \
+                             type fallback);                                   \
     type (                                                                     \
         *get_##lower)(database_o * db, object_id_t object, const char* name);  \
-    void (*set_##lower)(database_o * db,                                       \
+    bool (*set_##lower)(database_o * db,                                       \
                         object_id_t object,                                    \
                         const char* name,                                      \
                         type value);

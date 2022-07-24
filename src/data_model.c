@@ -133,18 +133,22 @@ static object_t* get_object(database_o* db, object_id_t id)
     ASSERT(id.info.slot < array_count(db->objects));
 
     object_t* object = &db->objects[id.info.slot].object;
-
-    ASSERT(object->id.info.generation >= id.info.generation);
-    if (object->id.info.generation > id.info.generation
-        || !object->id.info.type.index)
-    {
-        return 0;
-    }
-
-    ASSERT(id.info.type.index == object->id.info.type.index);
     ASSERT(id.info.slot == object->id.info.slot);
 
-    return object;
+    if (object->id.info.generation == id.info.generation)
+    {
+        if (object->id.info.type.index == id.info.type.index)
+        {
+            return object;
+        }
+        else
+        {
+            log_warning("Found an object of type %u when type %u was requested",
+                        object->id.info.type.index,
+                        id.info.type.index);
+        }
+    }
+    return 0;
 }
 
 static const property_layout_t*
@@ -207,6 +211,15 @@ static void* get_property_ptr(database_o* db,
 }
 
 #define DO_DEFINE_GETTER_SETTER(upper, lower, type)                            \
+    static type get_##lower##_or(database_o* db,                               \
+                                 object_id_t object,                           \
+                                 const char* name,                             \
+                                 type fallback)                                \
+    {                                                                          \
+        type* ptr = get_property_ptr(db, object, PTYPE_##upper, name);         \
+        return ptr ? *ptr : fallback;                                          \
+    }                                                                          \
+                                                                               \
     static type get_##lower(database_o* db,                                    \
                             object_id_t object,                                \
                             const char* name)                                  \
@@ -215,14 +228,22 @@ static void* get_property_ptr(database_o* db,
         ASSERT(ptr);                                                           \
         return *ptr;                                                           \
     }                                                                          \
-    static void set_##lower(database_o* db,                                    \
+                                                                               \
+    static bool set_##lower(database_o* db,                                    \
                             object_id_t object,                                \
                             const char* name,                                  \
                             type value)                                        \
     {                                                                          \
         type* ptr = get_property_ptr(db, object, PTYPE_##upper, name);         \
-        ASSERT(ptr);                                                           \
-        *ptr = value;                                                          \
+        if (!ptr)                                                              \
+        {                                                                      \
+            return false;                                                      \
+        }                                                                      \
+        else                                                                   \
+        {                                                                      \
+            *ptr = value;                                                      \
+            return true;                                                       \
+        }                                                                      \
     }
 
 FOR_ALL_BASE_PROPERTY_TYPES(DO_DEFINE_GETTER_SETTER)
@@ -390,6 +411,7 @@ static object_id_t create_object(database_o* db, object_type_t type)
         array_push(db->alloc, db->objects, (object_slot_t){0});
         slot_index = array_count(db->objects) - 1;
     }
+    db->objects[0].next_free = db->objects[slot_index].next_free;
 
     object_t* object = &db->objects[slot_index].object;
     object->id.info.type = type;
@@ -418,7 +440,8 @@ static object_id_t create_object(database_o* db, object_type_t type)
 
 #define DO_ASSIGN_GETTER_SETTER(upper, lower, type)                            \
     db->set_##lower = set_##lower;                                             \
-    db->get_##lower = get_##lower;
+    db->get_##lower = get_##lower;                                             \
+    db->get_##lower##_or = get_##lower##_or;
 
 static void load(void* api)
 {

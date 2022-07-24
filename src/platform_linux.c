@@ -50,10 +50,7 @@ void* platform_virtual_alloc(uint64_t size)
 
     if (result == MAP_FAILED)
     {
-        fprintf(stderr,
-                "Call to mmap(%lu) failed : %s\n",
-                size,
-                strerror(errno));
+        log_error("Call to mmap(%lu) failed : %s", size, strerror(errno));
         return 0;
     }
 
@@ -158,10 +155,9 @@ void* platform_open_shared_library(const char* name)
     void* result = dlopen(file_name, RTLD_NOW | RTLD_GLOBAL);
     if (!result)
     {
-        fprintf(stderr,
-                "Could not open shared library '%s' : %s",
-                file_name,
-                dlerror());
+        log_error("Could not open shared library '%s' : %s",
+                  file_name,
+                  dlerror());
     }
     return result;
 }

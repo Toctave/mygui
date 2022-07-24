@@ -683,7 +683,7 @@ static GLuint compile_shader_stage(mem_api* mem,
         {
             if (line[line_length] == '\n')
             {
-                log_continue("%s:%.*s\n", path, line_length, line);
+                log_continue("%s:%.*s", path, line_length, line);
                 line += line_length + 1;
                 line_length = 0;
             }

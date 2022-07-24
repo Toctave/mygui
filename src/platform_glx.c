@@ -199,7 +199,7 @@ bool platform_init(const char* argv0,
     dpy = XOpenDisplay(0);
     if (!dpy)
     {
-        fprintf(stderr, "No X11 display available.\n");
+        log_error("No X11 display available.");
         return false;
     }
 
@@ -212,25 +212,24 @@ bool platform_init(const char* argv0,
         int eventBase;
         if (!glXQueryExtension(dpy, &errorBase, &eventBase))
         {
-            fprintf(stderr,
-                    "No GLX extension on this X server connection, exiting.\n");
+            log_error("No GLX extension on this X server connection, exiting.");
             return false;
         }
 
         int major, minor;
         if (!glXQueryVersion(dpy, &major, &minor))
         {
-            fprintf(stderr, "Could not query GLX version, exiting.\n");
+            log_error("Could not query GLX version, exiting.");
             return false;
         }
 
         if (major < 1 || minor < 1)
         {
-            fprintf(stderr,
-                    "GLX version 1.1 or later is required but %d.%d was found, "
-                    "exiting.\n",
-                    major,
-                    minor);
+            log_error(
+                "GLX version 1.1 or later is required but %d.%d was found, "
+                "exiting.",
+                major,
+                minor);
             return false;
         }
 
@@ -255,7 +254,7 @@ bool platform_init(const char* argv0,
                               &matchingConfigCount);
         if (!matchingConfigCount)
         {
-            fprintf(stderr, "Could not find a suitable GLX config, exiting.\n");
+            log_error("Could not find a suitable GLX config, exiting.");
             return false;
         }
 
@@ -293,15 +292,14 @@ bool platform_init(const char* argv0,
 
     if (!window)
     {
-        fprintf(stderr, "Could not create window, exiting.\n");
+        log_error("Could not create window, exiting.");
         return false;
     }
 
     if (!glXCreateContextAttribsARB)
     {
-        fprintf(
-            stderr,
-            "Could not find glXCreateContextAttribsARB function, exiting.\n");
+        log_error(
+            "Could not find glXCreateContextAttribsARB function, exiting.");
         return false;
     }
 
@@ -322,13 +320,13 @@ bool platform_init(const char* argv0,
 
     if (!glxContext)
     {
-        fprintf(stderr, "Could not create GLX context, exiting.\n");
+        log_error("Could not create GLX context, exiting.");
         return false;
     }
 
     if (!glXMakeContextCurrent(dpy, glxWindow, glxWindow, glxContext))
     {
-        fprintf(stderr, "Could not make GLX context current, exiting.\n");
+        log_error("Could not make GLX context current, exiting.");
         return false;
     }
 
@@ -338,9 +336,8 @@ bool platform_init(const char* argv0,
     }
     else
     {
-        fprintf(
-            stderr,
-            "Cannot find extension GLX_EXT_swap_control, V-sync will be off\n");
+        log_error(
+            "Cannot find extension GLX_EXT_swap_control, V-sync will be off");
     }
 
     XStoreName(dpy, window, window_title);
@@ -351,14 +348,14 @@ bool platform_init(const char* argv0,
         XIM x_input_method = XOpenIM(dpy, 0, 0, 0);
         if (!x_input_method)
         {
-            fprintf(stderr, "Could not open input method.\n");
+            log_error("Could not open input method.");
         }
 
         XIMStyles* styles = 0;
         if (XGetIMValues(x_input_method, XNQueryInputStyle, &styles, NULL)
             || !styles)
         {
-            fprintf(stderr, "Could not retrieve input styles.\n");
+            log_error("Could not retrieve input styles.");
         }
 
         XIMStyle best_match_style = 0;
@@ -376,7 +373,7 @@ bool platform_init(const char* argv0,
 
         if (!best_match_style)
         {
-            fprintf(stderr, "Could not find matching input style.\n");
+            log_error("Could not find matching input style.");
         }
 
         inputContext = XCreateIC(x_input_method,
@@ -389,7 +386,7 @@ bool platform_init(const char* argv0,
                                  NULL);
         if (!inputContext)
         {
-            fprintf(stderr, "Could not create input context\n");
+            log_error("Could not create input context");
         }
     }
 
@@ -398,7 +395,7 @@ bool platform_init(const char* argv0,
     WM_DELETE_WINDOW = XInternAtom(dpy, "WM_DELETE_WINDOW", true);
     if (!XSetWMProtocols(dpy, window, &WM_DELETE_WINDOW, 1))
     {
-        fprintf(stderr, "Could not register WM_DELETE_WINDOW.\n");
+        log_error("Could not register WM_DELETE_WINDOW.");
     }
 
     return true;
@@ -520,8 +517,7 @@ void platform_handle_input_events(platform_input_info_t* input)
 
                 if (status == XBufferOverflow)
                 {
-                    log_error(
-                        "Buffer overflow while reading keyboard input.\n");
+                    log_error("Buffer overflow while reading keyboard input.");
                     break;
                 }
 

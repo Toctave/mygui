@@ -106,7 +106,7 @@ static void test_db(mem_api* mem, database_api* db)
     {
         object_id_t id = db->create_object(mydb, typ);
 
-        log_debug("ID : %u %u %u\n",
+        log_debug("ID : %u %u %u",
                   id.info.type,
                   id.info.generation,
                   id.info.slot);
@@ -591,15 +591,15 @@ int main(int argc, const char** argv)
         {
             if (get_bit(input.keys_pressed, key))
             {
-                log_debug("Pressed : %s\n", KEY_NAMES[key]);
+                log_debug("Pressed : %s", KEY_NAMES[key]);
             }
             if (get_bit(input.keys_down, key))
             {
-                log_debug("Down : %s\n", KEY_NAMES[key]);
+                log_debug("Down : %s", KEY_NAMES[key]);
             }
             if (get_bit(input.keys_released, key))
             {
-                log_debug("Released : %s\n", KEY_NAMES[key]);
+                log_debug("Released : %s", KEY_NAMES[key]);
             }
         }
 

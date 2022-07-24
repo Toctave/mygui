@@ -37,26 +37,27 @@ void log_init(mem_allocator_i* alloc)
     line_indices[0] = 0;
 }
 
-static void print_message(const log_message_t* message)
+static const char* get_severity_string(log_severity_e severity)
 {
-    const char* severity_str = "UNKNOWN";
-    switch (message->severity)
+    switch (severity)
     {
     case DEBUG:
-        severity_str = "DEBUG";
-        break;
+        return "DEBUG";
     case INFO:
-        severity_str = "INFO";
-        break;
+        return "INFO";
     case WARNING:
-        severity_str = "WARNING";
-        break;
+        return "WARNING";
     case ERROR:
-        severity_str = "ERROR";
-        break;
+        return "ERROR";
+    default:
+        return "UNKNOWN";
     }
+}
 
-    int indent = fprintf(stderr, "[%s] ", severity_str);
+static void print_message(const log_message_t* message)
+{
+    int indent =
+        fprintf(stderr, "[%s] ", get_severity_string(message->severity));
 
     for (uint64_t line = message->first_line;
          line < message->first_line + message->line_count;
@@ -102,6 +103,10 @@ static void finish_message()
 
 void log_flush()
 {
+    if (!buffer)
+    {
+        return;
+    }
     if (writing_message)
     {
         finish_message();
@@ -119,6 +124,13 @@ void log_terminate()
 
 static void vlog_continue(const char* fmt, va_list args)
 {
+    if (!buffer)
+    {
+        fprintf(stderr, "    ");
+        vfprintf(stderr, fmt, args);
+        fprintf(stderr, "\n");
+        return;
+    }
     int length = vsprintf(cursor, fmt, args);
 
     for (int i = 0; i < length; i++)
@@ -136,6 +148,15 @@ static void vlog_continue(const char* fmt, va_list args)
 
 static void vlog_message(log_severity_e severity, const char* fmt, va_list args)
 {
+    if (!buffer)
+    {
+        fprintf(stderr, "[WARNING] Logging system uninitialized\n");
+        fprintf(stderr, "[%s] ", get_severity_string(severity));
+        vfprintf(stderr, fmt, args);
+        fprintf(stderr, "\n");
+        return;
+    }
+
     log_flush();
 
     ASSERT(!writing_message);

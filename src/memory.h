@@ -22,10 +22,8 @@ typedef struct mem_api
 
     mem_stack_allocator_o* (*stack_create)(void* buffer, uint64_t size);
     void (*stack_destroy)(mem_stack_allocator_o* stack);
-
     uint64_t (*stack_get_cursor)(mem_stack_allocator_o* stack);
     void (*stack_revert)(mem_stack_allocator_o* stack, uint64_t cursor);
-
     void* (*stack_push)(mem_stack_allocator_o* alloc, uint64_t size);
 } mem_api;
 

@@ -533,9 +533,9 @@ static bool load_bdf(mem_allocator_i* alloc, font_t* font, const char* bdf_path)
                 }
             }
         }
-        else if (read_word(&cursor, "SWIDTH"))
+        else if (read_word(&cursor, "ENDFONT"))
         {
-            // ignore line.
+            break;
         }
         else
         {
